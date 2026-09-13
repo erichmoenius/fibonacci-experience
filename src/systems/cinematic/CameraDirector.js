@@ -70,6 +70,10 @@ export default class CameraDirector {
 
     this.currentTarget = new THREE.Vector3(0, 0, 0);
 
+    // Explore keeps its own horizontal orientation baseline.
+    this.exploreForward = new THREE.Vector3(0, 0, -1);
+    this.captureExploreForward();
+
     // ------------------------------------------------
     // FUTURE FLIGHT SYSTEM
     // ------------------------------------------------
@@ -213,11 +217,21 @@ export default class CameraDirector {
       this.previousMode !== CameraMode.EXPLORE
     ) {
       this.basePosition.copy(this.position);
+      this.captureExploreForward();
     }
   }
 
   isMode(mode) {
     return this.mode === mode;
+  }
+
+  captureExploreForward() {
+    this.exploreForward.subVectors(this.currentTarget, this.position);
+    this.exploreForward.y = 0;
+
+    if (this.exploreForward.lengthSq() > 0.000001) {
+      this.exploreForward.normalize();
+    }
   }
 
   inspect(target, lookAt = null) {
@@ -360,9 +374,11 @@ export default class CameraDirector {
     // FREE LOOK — HORIZONTAL YAW
     // -------------------------------------------------
 
-    const yawSensitivity = 0.0025;
+    const yawSensitivity = 0.002;
 
-    this.yaw += lookIntent.yaw * yawSensitivity;
+    if (lookIntent.yaw !== 0) {
+      this.yaw += lookIntent.yaw * yawSensitivity;
+    }
 
     // Consume the mouse movement impulse.
 
@@ -594,6 +610,17 @@ export default class CameraDirector {
 
   applyLookTarget() {
     if (!this.camera) return;
+
+    if (this.mode === CameraMode.EXPLORE) {
+      this.yawTarget
+        .copy(this.exploreForward)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw)
+        .add(this.position);
+
+      this.camera.lookAt(this.yawTarget);
+
+      return;
+    }
 
     const direction = this.currentTarget.clone().sub(this.position);
 

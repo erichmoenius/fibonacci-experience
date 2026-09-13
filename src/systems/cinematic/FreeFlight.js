@@ -243,6 +243,20 @@ export class FreeFlight {
         this.pointer.lastFreeX = event.clientX;
         this.pointer.lastFreeY = event.clientY;
 
+        // Unlocked free mouse routes each axis independently:
+        // X accumulates yaw while Y continues to drive Z travel.
+        if (!this.pointer.locked) {
+          this.look.yaw += freeMoveX;
+
+          const zSensitivity = 0.04;
+          const targetZ = Math.max(-1, Math.min(1, freeMoveY * zSensitivity));
+          const zBlend = 0.22;
+
+          this.input.z += (targetZ - this.input.z) * zBlend;
+
+          return;
+        }
+
         // -------------------------------------------------
         // DOMINANT AXIS
         // -------------------------------------------------
@@ -263,7 +277,11 @@ export class FreeFlight {
           // HORIZONTAL → YAW
           // -----------------------------------------------
 
-          this.look.yaw = freeMoveX;
+          if (this.pointer.locked) {
+            this.look.yaw += freeMoveX;
+          } else {
+            this.look.yaw = freeMoveX;
+          }
 
           // Stop depth intent
 
@@ -285,7 +303,9 @@ export class FreeFlight {
 
           // No yaw from vertical movement
 
-          this.look.yaw = 0;
+          if (!this.pointer.locked) {
+            this.look.yaw = 0;
+          }
         }
 
         return;
