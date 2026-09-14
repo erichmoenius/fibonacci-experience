@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { CameraPose } from "./CameraPose";
 import { FlightSystem } from "./FlightSystem";
 import { Flight } from "./Flight";
+import { FreeFlight } from "./FreeFlight";
+import { TravelerMode } from "./TravelerMode";
 
 // =====================================================
 // CAMERA MODES
@@ -15,7 +17,7 @@ export const CameraMode = {
 };
 
 export default class CameraDirector {
-  constructor(camera) {
+  constructor(camera, canvas) {
     this.camera = camera;
 
     // ------------------------------------------------
@@ -32,6 +34,14 @@ export default class CameraDirector {
     this.journey = null;
 
     this.onFlightFinished = null;
+
+    // -------------------------------------------------
+    // CAMERA ORIENTATION
+    // -------------------------------------------------
+
+    this.yaw = 0;
+
+    this.yawTarget = new THREE.Vector3();
 
     // ------------------------------------------------
     // TARGETS
@@ -50,6 +60,7 @@ export default class CameraDirector {
     this.lookTarget = new THREE.Vector3(0, 0, 0);
 
     // Home camera pose
+
     this.homePosition = this.targetPosition.clone();
     this.homeLookTarget = this.lookTarget.clone();
 
@@ -59,35 +70,50 @@ export default class CameraDirector {
 
     this.currentTarget = new THREE.Vector3(0, 0, 0);
 
-    // Future flight system
-    this.currentPose = new CameraPose();
+    // Explore keeps its own horizontal orientation baseline.
+    this.exploreForward = new THREE.Vector3(0, 0, -1);
+    this.captureExploreForward();
 
+    // ------------------------------------------------
+    // FUTURE FLIGHT SYSTEM
+    // ------------------------------------------------
+
+    this.currentPose = new CameraPose();
     this.flightSystem = new FlightSystem();
 
-    this.flightSystem.onFinished = () => {
-      if (this.mode === CameraMode.TRAVEL) {
-        this.finishTravel();
-      }
-    };
+    // -------------------------------------------------
+    // TRAVELER MODE
+    // -------------------------------------------------
 
-    this.flightSystem.onFinished = () => {
-      if (this.mode === CameraMode.TRAVEL) {
-        this.finishTravel();
-      }
-    };
+    this.travelerMode = new TravelerMode();
 
-    this.flightSystem.onFinished = () => {
-      this.setMode(CameraMode.EXPLORE);
+    // -------------------------------------------------
+    // FREE FLIGHT
+    // -------------------------------------------------
 
-      this.onFlightFinished?.();
-    };
+    this.freeFlight = new FreeFlight(this.travelerMode, canvas);
+
+    // CameraDirector starts in EXPLORE mode.
+    // Activate FreeFlight explicitly for the initial state.
+
+    this.freeFlight.start();
+
+    console.log("🛩️ CameraDirector → FreeFlight created");
+
+    // -------------------------------------------------
+    // FLIGHT FINISHED
+    // -------------------------------------------------
 
     this.flightSystem.onFinished = () => {
       console.log("🎉 Flight finished.");
 
+      if (this.mode === CameraMode.TRAVEL) {
+        this.finishTravel();
+      }
+
+      this.setMode(CameraMode.EXPLORE);
       this.onFlightFinished?.();
     };
-
     // ------------------------------------------------
     // CAMERA OFFSET
     // ------------------------------------------------
@@ -161,22 +187,51 @@ export default class CameraDirector {
   // =====================================================
 
   setMode(mode) {
-    if (this.mode === mode) return;
+    if (this.mode === mode) {
+      if (mode === CameraMode.EXPLORE) {
+        this.freeFlight.start();
+      }
+
+      return;
+    }
 
     this.previousMode = this.mode;
-
     this.mode = mode;
+
+    // -------------------------------------------------
+    // FREE FLIGHT
+    // -------------------------------------------------
+
+    if (mode === CameraMode.EXPLORE) {
+      this.freeFlight.start();
+    } else {
+      this.freeFlight.stop();
+    }
+
+    // -------------------------------------------------
+    // EXPLORE BASE POSITION
+    // -------------------------------------------------
 
     if (
       mode === CameraMode.EXPLORE &&
       this.previousMode !== CameraMode.EXPLORE
     ) {
       this.basePosition.copy(this.position);
+      this.captureExploreForward();
     }
   }
 
   isMode(mode) {
     return this.mode === mode;
+  }
+
+  captureExploreForward() {
+    this.exploreForward.subVectors(this.currentTarget, this.position);
+    this.exploreForward.y = 0;
+
+    if (this.exploreForward.lengthSq() > 0.000001) {
+      this.exploreForward.normalize();
+    }
   }
 
   inspect(target, lookAt = null) {
@@ -222,6 +277,22 @@ export default class CameraDirector {
   }
 
   returnHome() {
+    // -------------------------------------------------
+    // RESET FREE FLIGHT
+    // -------------------------------------------------
+
+    this.freeFlight.reset();
+
+    // -------------------------------------------------
+    // RESET ORIENTATION
+    // -------------------------------------------------
+
+    this.yaw = 0;
+
+    // -------------------------------------------------
+    // RETURN HOME
+    // -------------------------------------------------
+
     this.basePosition.copy(this.homePosition);
 
     this.setMode(CameraMode.RETURN);
@@ -289,23 +360,56 @@ export default class CameraDirector {
 
     this.channels.cinematic.set(0, floatY, 0);
 
-    this.applyLookTarget();
+    // -------------------------------------------------
+    // FREE FLIGHT
+    // -------------------------------------------------
 
-    this.setPosition(this.time);
+    this.freeFlight.update(delta);
 
-    this.applyFlight();
+    const flightOffset = this.freeFlight.getOffset();
 
-    console.log("Camera position:", this.position.toArray());
-    console.log("CameraMode.EXPLORE");
+    const lookIntent = this.freeFlight.getLookIntent();
+
+    // -------------------------------------------------
+    // FREE LOOK — HORIZONTAL YAW
+    // -------------------------------------------------
+
+    const yawSensitivity = 0.002;
+
+    if (lookIntent.yaw !== 0) {
+      this.yaw += lookIntent.yaw * yawSensitivity;
+    }
+
+    // Consume the mouse movement impulse.
+
+    lookIntent.yaw = 0;
+
+    // -------------------------------------------------
+    // LOOK TARGET
+    // -------------------------------------------------
+
+    // -------------------------------------------------
+    // BASE EXPLORE POSITION
+    // -------------------------------------------------
+
+    this.setPosition(this.time, 0);
+
+    // -------------------------------------------------
+    // FREE FLIGHT OFFSET
+    // -------------------------------------------------
+
+    this.position.x += flightOffset.x;
+    this.position.y += flightOffset.y;
+    this.position.z += flightOffset.z;
+
+    // -------------------------------------------------
+    // APPLY
+    // -------------------------------------------------
 
     this.applyComputedPosition();
   }
 
   updateInspect(delta) {
-    if (this.journeyDirector) {
-      console.log("Camera Journey:", this.journeyDirector.getPhase());
-    }
-
     const floatY = Math.sin(this.time * this.floatSpeed) * this.floatStrength;
 
     this.channels.cinematic.set(0, floatY, 0);
@@ -343,8 +447,6 @@ export default class CameraDirector {
 
     this.applyLookTarget();
 
-    console.log("CameraMode.RETURN");
-
     this.position.lerp(this.targetPosition, 0.08);
 
     if (this.position.distanceTo(this.targetPosition) < 0.01) {
@@ -360,6 +462,8 @@ export default class CameraDirector {
     this.basePosition.copy(this.targetPosition);
 
     this.setMode(CameraMode.EXPLORE);
+
+    this.onReturnHome?.();
   }
 
   finishTravel() {
@@ -398,8 +502,6 @@ export default class CameraDirector {
 
     // this.currentTarget.lerp(this.lookTarget, this.lookDamping);
     this.currentTarget.copy(this.lookTarget);
-
-    console.log("Camera mode:", this.mode);
 
     switch (this.mode) {
       case CameraMode.EXPLORE:
@@ -469,11 +571,6 @@ export default class CameraDirector {
     this.position.x += Math.sin(time * 0.3) * 0.2 + px + idle.x;
     this.position.y += Math.cos(time * 0.2) * 0.2 + py + idle.y;
 
-    console.log("Base:", this.basePosition.toArray());
-    console.log("Parallax:", this.parallax);
-
-    console.log("Parallax:", this.parallax);
-
     return this.position;
   }
 
@@ -482,23 +579,29 @@ export default class CameraDirector {
   // =====================================================
 
   applyComputedPosition() {
-    // Keep the current cinematic pose synchronized
-    console.log(
-      "POSE",
-      this.currentPose.position.toArray(),
-      "LIVE",
-      this.position.toArray(),
-    );
     this.currentPose.position.copy(this.position);
     this.currentPose.lookTarget.copy(this.currentTarget);
 
     this.applyPosition(this.position.x, this.position.y, this.position.z);
+
+    this.applyLookTarget();
   }
 
   applyPosition(x, y, z) {
     if (!this.camera) return;
 
+    // -------------------------------------------------
+    // POSITION
+    // -------------------------------------------------
+
     this.camera.position.set(x, y, z);
+
+    // -------------------------------------------------
+    // ORIENTATION
+    // -------------------------------------------------
+
+    // Orientation is handled by applyLookTarget().
+    // this.camera.rotation.y = this.yaw;
   }
 
   // =====================================================
@@ -508,9 +611,30 @@ export default class CameraDirector {
   applyLookTarget() {
     if (!this.camera) return;
 
-    //this.camera.lookAt(this.currentTarget);
+    if (this.mode === CameraMode.EXPLORE) {
+      this.yawTarget
+        .copy(this.exploreForward)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw)
+        .add(this.position);
 
-    console.log("Look target:", this.currentTarget.toArray());
+      this.camera.lookAt(this.yawTarget);
+
+      return;
+    }
+
+    const direction = this.currentTarget.clone().sub(this.position);
+
+    // HORIZONTAL YAW ONLY
+    const horizontalDirection = new THREE.Vector3(direction.x, 0, direction.z);
+
+    horizontalDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+
+    const yawTarget = this.position.clone().add(horizontalDirection);
+
+    // Preserve original vertical target level
+    yawTarget.y += direction.y;
+
+    this.camera.lookAt(yawTarget);
   }
 
   // =====================================================

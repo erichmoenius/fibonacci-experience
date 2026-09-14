@@ -12,6 +12,14 @@ export default class EngineCore {
     this.transitEnergy = 0;
 
     // ------------------------------------------------
+    //
+    // INVITATION
+    //
+    // ------------------------------------------------
+
+    this.invitationActive = false;
+
+    // ------------------------------------------------
     // CONTAINMENT SHELL
     // ------------------------------------------------
 
@@ -394,8 +402,46 @@ export default class EngineCore {
     );
   }
 
+  // =====================================================
+  //
+  // INVITATION
+  //
+  // =====================================================
+
+  setInvitation(active) {
+    this.invitationActive = active;
+  }
+
   update(delta) {
     this.time += delta;
+
+    // ------------------------------------------------
+    //
+    // INVITATION PULSE
+    //
+    // ------------------------------------------------
+
+    let invitationPulse = 0;
+
+    if (this.invitationActive) {
+      // Slow cosmic heartbeat.
+
+      invitationPulse = (Math.sin(this.time * 1.6) + 1) * 0.5;
+    }
+
+    // ------------------------------------------------
+    //
+    // INNER CORE — INVITATION
+    //
+    // ------------------------------------------------
+
+    if (this.invitationActive) {
+      const glow = 0.015 + invitationPulse * 0.12;
+
+      this.innerCore.material.color.setRGB(glow, glow * 0.32, 0);
+    } else {
+      this.innerCore.material.color.set(0x000000);
+    }
 
     const breathe = 1 + Math.sin(this.time * 0.45) * 0.008;
 

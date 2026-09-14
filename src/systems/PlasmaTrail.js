@@ -4,6 +4,13 @@ export default class PlasmaTrail {
   constructor() {
     this.object = new THREE.Group();
 
+    // Dormant during normal exploration.
+    // Activated later during Core Awakening.
+
+    this.object.visible = false;
+
+    console.log("🧪 PLASMA TRAIL CREATED — HIDDEN");
+
     const geometry = new THREE.SphereGeometry(0.02, 12, 12);
 
     const material = new THREE.MeshBasicMaterial({
@@ -44,6 +51,8 @@ export default class PlasmaTrail {
   }
 
   update(delta) {
+    if (!this.object.visible) return;
+
     this.angle += delta * this.speed;
 
     this.head.position.set(

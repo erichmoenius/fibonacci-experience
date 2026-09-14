@@ -31,6 +31,14 @@ export default class JourneyDirector {
     this.gateways = [];
 
     this.onJourneyFinished = null;
+
+    // -------------------------------------------------
+    // GATEWAY STATE
+    // -------------------------------------------------
+
+    this.gatewayReady = false;
+
+    this.onGatewayReady = null;
   }
 
   getPhase() {
@@ -100,6 +108,10 @@ export default class JourneyDirector {
         gateway.radius,
       );
 
+      const distance = gateway.position.distanceTo(position);
+
+      console.log("🧪 GATEWAY DISTANCE:", distance.toFixed(2));
+
       if (gateway.contains(position)) {
         return gateway;
       }
@@ -113,10 +125,46 @@ export default class JourneyDirector {
   }
 
   update(cameraPosition, delta = 0.016) {
+    // -------------------------------------------------
+    // GATEWAY PROXIMITY
+    // -------------------------------------------------
+
+    // -------------------------------------------------
+    //
+    // GATEWAY PROXIMITY
+    //
+    // -------------------------------------------------
+
+    const travelerPosition = this.cameraDirector.position;
+
+    const gateway = this.findGateway(travelerPosition);
+
+    const ready = gateway !== null;
+
+    console.log(
+      "🧪 GATEWAY STATE:",
+      "ready:",
+      ready,
+      "previous:",
+      this.gatewayReady,
+    );
+
+    // -------------------------------------------------
+    //
+    // GATEWAY STATE CHANGE
+    //
+    // -------------------------------------------------
+
+    if (ready !== this.gatewayReady) {
+      this.gatewayReady = ready;
+
+      console.log(ready ? "🌌 GATEWAY READY" : "🌌 GATEWAY LEFT");
+
+      this.onGatewayReady?.(ready, gateway);
+    }
+
     if (!this.activeJourney) return;
 
     this.activeJourney.update(delta);
-
-    if (!this.activeJourney) return;
   }
 }

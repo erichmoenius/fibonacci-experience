@@ -1,0 +1,632 @@
+bash
+
+cat > /mnt/user-data/outputs/freeflight-test.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FreeFlight Test</title>
+<style>
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #010109;
+  overflow: hidden;
+  cursor: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── CURSOR ─────────────────────────────────────── */
+
+#cursor {
+  position: fixed;
+  width: 11px; height: 11px;
+  border: 1.5px solid rgba(180,200,255,0.55);
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%,-50%);
+  transition: border-color .12s, border-radius .15s,
+              width .15s, height .15s;
+  z-index: 200;
+}
+#cursor.strafe {
+  border-color: #3dffc8;
+  border-radius: 2px;
+  width: 15px; height: 15px;
+}
+
+/* ── MODE LABEL ─────────────────────────────────── */
+
+#mode {
+  position: fixed;
+  top: 22px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: .18em;
+  color: rgba(160,180,255,.3);
+  pointer-events: none;
+  transition: color .15s;
+}
+#mode.strafe { color: #3dffc8; }
+
+/* ── SPEED BAR ──────────────────────────────────── */
+
+#speed-track {
+  position: fixed;
+  right: 22px; top: 50%;
+  transform: translateY(-50%);
+  width: 2px; height: 80px;
+  background: rgba(255,255,255,.06);
+  border-radius: 1px;
+}
+#speed-fill {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 0%;
+  background: #3dffc8;
+  border-radius: 1px;
+  transition: height .04s;
+}
+
+/* ── POSITION READOUT ───────────────────────────── */
+
+#readout {
+  position: fixed;
+  bottom: 22px; right: 22px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: .1em;
+  color: rgba(255,255,255,.18);
+  text-align: right;
+  line-height: 1.9;
+  pointer-events: none;
+}
+
+/* ── CONTROLS HINT ──────────────────────────────── */
+
+#hint {
+  position: fixed;
+  bottom: 26px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: .1em;
+  color: rgba(255,255,255,.2);
+  text-align: center;
+  line-height: 2;
+  pointer-events: none;
+  transition: opacity 1.8s;
+}
+#hint.fade { opacity: 0; }
+
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="mode">FREE — MOUSE</div>
+<div id="speed-track"><div id="speed-fill"></div></div>
+<div id="readout">X 0.0<br>Y 0.0<br>Z 0.0<br>YAW 0°</div>
+<div id="hint">
+  MOVE MOUSE &nbsp;→&nbsp; yaw / forward-back<br>
+  HOLD LMB + DRAG &nbsp;→&nbsp; XY strafe
+</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
+
+
+// =====================================================
+// FREE FLIGHT  (inlined — no import needed for test)
+// =====================================================
+
+class FreeFlight {
+
+  constructor(target = window) {
+    this.target    = target;
+    this.active    = false;
+    this.position  = { x: 0, y: 0, z: 0 };
+    this.velocity  = { x: 0, y: 0, z: 0 };
+    this.yaw         = 0;
+    this.yawVelocity = 0;
+
+    this.settings = {
+      strafeSensitivity : 4.0,
+      depthSensitivity  : 6.0,
+      yawSensitivity    : Math.PI * 1.5,
+      acceleration      : 14.0,
+      damping           : 4.0,
+      yawDamping        : 5.0,
+      maxSpeed          : 6.0,
+      maxYawSpeed       : 3.5,
+    };
+
+    this._lmbDown  = false;
+    this._strafe   = { x: 0, y: 0 };
+    this._free     = { x: 0, y: 0 };
+    this._lastX    = 0;
+    this._lastY    = 0;
+    this._hasFirst = false;
+
+    this._onDown   = this._handleDown.bind(this);
+    this._onMove   = this._handleMove.bind(this);
+    this._onUp     = this._handleUp.bind(this);
+    this._onCancel = this._handleUp.bind(this);
+    this._listen();
+  }
+
+  start()  { this.active = true; }
+  stop()   { this.active = false; this._zeroMotion(); }
+  reset()  {
+    this.position.x = this.position.y = this.position.z = 0;
+    this.yaw = 0; this._zeroMotion();
+    this._lmbDown = false; this._hasFirst = false;
+  }
+
+  getPosition()  { return this.position; }
+  getVelocity()  { return this.velocity; }
+  getYaw()       { return this.yaw; }
+  getYawRate()   { return this.yawVelocity; }
+  isStrafing()   { return this._lmbDown; }
+  getSpeed() {
+    const { x, y, z } = this.velocity;
+    return Math.min(Math.sqrt(x*x + y*y + z*z) / this.settings.maxSpeed, 1);
+  }
+
+  update(delta = 0.016) {
+    if (!this.active) return;
+    const s = this.settings;
+    const w = this.target.innerWidth  ?? window.innerWidth;
+    const h = this.target.innerHeight ?? window.innerHeight;
+
+    const sx = this._strafe.x / delta;
+    const sy = this._strafe.y / delta;
+    const fx = this._free.x   / delta;
+    const fy = this._free.y   / delta;
+
+    const blend = 1 - Math.exp(-s.acceleration * delta);
+    const damp  = Math.exp(-s.damping * delta);
+
+    // XY strafe (LMB)
+    if (this._lmbDown) {
+      this.velocity.x += ( (sx / w) * s.strafeSensitivity - this.velocity.x) * blend;
+      this.velocity.y += (-(sy / h) * s.strafeSensitivity - this.velocity.y) * blend;
+    } else {
+      this.velocity.x *= damp;
+      this.velocity.y *= damp;
+    }
+
+    // Z depth (free mouse Y)
+    if (!this._lmbDown) {
+      const tvZ = -(fy / h) * s.depthSensitivity;
+      if (Math.abs(fy) > 1) {
+        this.velocity.z += (tvZ - this.velocity.z) * blend;
+      } else {
+        this.velocity.z *= damp;
+      }
+    } else {
+      this.velocity.z *= damp;
+    }
+
+    // Yaw (free mouse X)
+    if (!this._lmbDown) {
+      const tvYaw = -(fx / w) * s.yawSensitivity;
+      if (Math.abs(fx) > 1) {
+        this.yawVelocity += (tvYaw - this.yawVelocity) * blend;
+      } else {
+        this.yawVelocity *= Math.exp(-s.yawDamping * delta);
+      }
+    } else {
+      this.yawVelocity *= Math.exp(-s.yawDamping * delta);
+    }
+
+    this.yawVelocity = Math.max(-s.maxYawSpeed, Math.min(s.maxYawSpeed, this.yawVelocity));
+    this.yaw = ((this.yaw + this.yawVelocity * delta + Math.PI) % (Math.PI * 2)) - Math.PI;
+
+    // Speed clamp
+    const spd = Math.sqrt(this.velocity.x**2 + this.velocity.y**2 + this.velocity.z**2);
+    if (spd > s.maxSpeed) {
+      const sc = s.maxSpeed / spd;
+      this.velocity.x *= sc; this.velocity.y *= sc; this.velocity.z *= sc;
+    }
+
+    // Position (yaw-relative)
+    const cy = Math.cos(this.yaw);
+    const sy2 = Math.sin(this.yaw);
+    this.position.x += ( this.velocity.x * cy - this.velocity.z * sy2) * delta;
+    this.position.y +=   this.velocity.y                                * delta;
+    this.position.z += (-this.velocity.x * sy2 - this.velocity.z * cy) * delta;
+
+    this._strafe.x = this._strafe.y = 0;
+    this._free.x   = this._free.y   = 0;
+  }
+
+  _listen() {
+    const o = { capture: true };
+    this.target.addEventListener('pointerdown',   this._onDown,   o);
+    this.target.addEventListener('pointermove',   this._onMove,   o);
+    this.target.addEventListener('pointerup',     this._onUp,     o);
+    this.target.addEventListener('pointercancel', this._onCancel, o);
+  }
+
+  _handleDown(e) {
+    if (e.button !== 0) return;
+    this._lmbDown = true;
+    this._lastX = e.clientX; this._lastY = e.clientY;
+    this._hasFirst = true;
+  }
+
+  _handleMove(e) {
+    this._lmbDown = (e.buttons & 1) === 1;
+    if (!this._hasFirst) {
+      this._lastX = e.clientX; this._lastY = e.clientY;
+      this._hasFirst = true; return;
+    }
+    const dx = e.clientX - this._lastX;
+    const dy = e.clientY - this._lastY;
+    if (this._lmbDown) { this._strafe.x += dx; this._strafe.y += dy; }
+    else               { this._free.x   += dx; this._free.y   += dy; }
+    this._lastX = e.clientX; this._lastY = e.clientY;
+  }
+
+  _handleUp(e) {
+    if (e.type !== 'pointercancel' && e.button !== 0) return;
+    this._lmbDown = false;
+  }
+
+  _zeroMotion() {
+    this.velocity.x = this.velocity.y = this.velocity.z = 0;
+    this.yawVelocity = 0;
+    this._strafe.x = this._strafe.y = 0;
+    this._free.x   = this._free.y   = 0;
+  }
+}
+
+
+// =====================================================
+// RENDERER
+// =====================================================
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x010109);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x010109, 0.009);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 600);
+camera.rotation.order = 'YXZ';   // yaw → pitch → roll (FPS order)
+
+
+// =====================================================
+// LIGHTING
+// =====================================================
+
+scene.add(new THREE.AmbientLight(0x0a0a1a, 1.0));
+
+const keyLight = new THREE.PointLight(0x3060ff, 3.0, 120);
+keyLight.position.set(0, 10, 5);
+scene.add(keyLight);
+
+const fillLight = new THREE.PointLight(0x8020ff, 1.5, 80);
+fillLight.position.set(-15, 5, -60);
+scene.add(fillLight);
+
+const rimLight = new THREE.PointLight(0x20ffe0, 1.0, 60);
+rimLight.position.set(0, -5, -180);
+scene.add(rimLight);
+
+
+// =====================================================
+// FLOOR GRID
+// =====================================================
+
+const grid = new THREE.GridHelper(500, 50, 0x0d0d2a, 0x0a0a22);
+grid.position.y = -3.5;
+scene.add(grid);
+
+
+// =====================================================
+// CORRIDOR PILLARS
+// =====================================================
+
+const pillarGeo  = new THREE.BoxGeometry(0.25, 7, 0.25);
+const pillarMatL = new THREE.MeshStandardMaterial({
+  color           : 0x0033cc,
+  emissive        : 0x0022aa,
+  emissiveIntensity: 0.7,
+  roughness       : 0.3,
+  metalness       : 0.8,
+});
+const pillarMatR = new THREE.MeshStandardMaterial({
+  color           : 0x6600cc,
+  emissive        : 0x440088,
+  emissiveIntensity: 0.7,
+  roughness       : 0.3,
+  metalness       : 0.8,
+});
+
+for (let i = 0; i < 16; i++) {
+  const z  = 5 - i * 14;
+
+  const pL = new THREE.Mesh(pillarGeo, pillarMatL);
+  pL.position.set(-7, 0, z);
+  scene.add(pL);
+
+  const pR = new THREE.Mesh(pillarGeo, pillarMatR);
+  pR.position.set(7, 0, z);
+  scene.add(pR);
+
+  // Horizontal connector beam
+  const beamGeo = new THREE.BoxGeometry(14.5, 0.08, 0.08);
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0x1a1a44, transparent: true, opacity: 0.5
+  });
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  beam.position.set(0, 3.4, z);
+  scene.add(beam);
+}
+
+
+// =====================================================
+// FLOATING OBJECTS
+// =====================================================
+
+const floatGeos = [
+  new THREE.IcosahedronGeometry(0.8, 0),
+  new THREE.OctahedronGeometry(0.9, 0),
+  new THREE.TetrahedronGeometry(0.9, 0),
+  new THREE.BoxGeometry(1.2, 1.2, 1.2),
+];
+const floatColors = [0x4488ff, 0x8844ff, 0x44ffcc, 0xff44aa, 0xffffff];
+
+const floaters = [];
+
+for (let i = 0; i < 60; i++) {
+  const geo   = floatGeos[i % floatGeos.length];
+  const color = floatColors[i % floatColors.length];
+  const scale = 0.4 + Math.random() * 1.4;
+
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    emissive        : color,
+    emissiveIntensity: 0.12,
+    roughness       : 0.4,
+    metalness       : 0.7,
+    transparent     : true,
+    opacity         : 0.5 + Math.random() * 0.4,
+  });
+
+  const wireMat = new THREE.MeshBasicMaterial({
+    color, wireframe: true, transparent: true, opacity: 0.2
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  const wire = new THREE.Mesh(geo, wireMat);
+
+  const x = (Math.random() - 0.5) * 80;
+  const y = (Math.random() - 0.5) * 30;
+  const z = 10 - Math.random() * 300;
+
+  mesh.position.set(x, y, z);
+  wire.position.copy(mesh.position);
+  mesh.scale.setScalar(scale);
+  wire.scale.setScalar(scale);
+
+  const rot = {
+    x: (Math.random() - 0.5) * 0.4,
+    y: (Math.random() - 0.5) * 0.6,
+    z: (Math.random() - 0.5) * 0.3,
+  };
+
+  floaters.push({ mesh, wire, rot });
+  scene.add(mesh);
+  scene.add(wire);
+}
+
+
+// =====================================================
+// DESTINATION MARKER
+// =====================================================
+
+const destGeo = new THREE.SphereGeometry(5, 24, 24);
+const destMat = new THREE.MeshStandardMaterial({
+  color: 0x20ffee, emissive: 0x10cccc, emissiveIntensity: 1.0,
+  roughness: 0.2, metalness: 0.5,
+});
+const dest = new THREE.Mesh(destGeo, destMat);
+dest.position.set(0, 0, -220);
+scene.add(dest);
+
+// Outer glow ring
+const ringGeo = new THREE.TorusGeometry(8, 0.08, 8, 80);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x20ffee, transparent: true, opacity: 0.3 });
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.position.copy(dest.position);
+scene.add(ring);
+
+
+// =====================================================
+// STARS
+// =====================================================
+
+const starCount = 4000;
+const starPos   = new Float32Array(starCount * 3);
+const starCol   = new Float32Array(starCount * 3);
+
+for (let i = 0; i < starCount; i++) {
+  starPos[i*3]   = (Math.random() - 0.5) * 500;
+  starPos[i*3+1] = (Math.random() - 0.5) * 250;
+  starPos[i*3+2] = 30 - Math.random() * 500;
+
+  const t = Math.random();
+  starCol[i*3]   = 0.6 + t * 0.4;
+  starCol[i*3+1] = 0.6 + t * 0.2;
+  starCol[i*3+2] = 1.0;
+}
+
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+starGeo.setAttribute('color',    new THREE.BufferAttribute(starCol, 3));
+
+scene.add(new THREE.Points(
+  starGeo,
+  new THREE.PointsMaterial({
+    size: 0.35, vertexColors: true,
+    transparent: true, opacity: 0.85, sizeAttenuation: true,
+  })
+));
+
+
+// =====================================================
+// FREE FLIGHT
+// =====================================================
+
+const flight = new FreeFlight();
+flight.start();
+
+
+// =====================================================
+// HUD ELEMENTS
+// =====================================================
+
+const cursorEl   = document.getElementById('cursor');
+const modeEl     = document.getElementById('mode');
+const speedFill  = document.getElementById('speed-fill');
+const readoutEl  = document.getElementById('readout');
+const hintEl     = document.getElementById('hint');
+
+window.addEventListener('pointermove', e => {
+  cursorEl.style.left = e.clientX + 'px';
+  cursorEl.style.top  = e.clientY + 'px';
+});
+
+setTimeout(() => hintEl.classList.add('fade'), 5000);
+
+
+// =====================================================
+// RESIZE
+// =====================================================
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+
+// =====================================================
+// LOOP
+// =====================================================
+
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const delta = Math.min(clock.getDelta(), 0.05);
+
+
+  // ------------------------------------------------
+  // FREE FLIGHT
+  // ------------------------------------------------
+
+  flight.update(delta);
+
+  const pos = flight.getPosition();
+  const vel = flight.getVelocity();
+  const yaw = flight.getYaw();
+  const spd = flight.getSpeed();
+
+
+  // ------------------------------------------------
+  // CAMERA
+  //
+  // rotation.order = 'YXZ':  yaw first, then pitch
+  // → standard FPS camera, no gimbal issues
+  // ------------------------------------------------
+
+  camera.position.set(
+    pos.x,
+    1.8 + pos.y,
+    10  + pos.z
+  );
+
+  camera.rotation.y = yaw;
+
+  // Subtle pitch: nose dips when flying forward
+  camera.rotation.x = vel.z * 0.04;
+
+  // Subtle roll: banks when yawing
+  camera.rotation.z = -flight.getYawRate() * 0.04;
+
+  // FOV breathes slightly with speed
+  camera.fov = 72 + spd * 12;
+  camera.updateProjectionMatrix();
+
+
+  // ------------------------------------------------
+  // DESTINATION PULSE
+  // ------------------------------------------------
+
+  const t = clock.getElapsedTime();
+  destMat.emissiveIntensity = 0.7 + Math.sin(t * 1.8) * 0.3;
+  ring.rotation.z = t * 0.4;
+  ring.rotation.x = t * 0.25;
+
+
+  // ------------------------------------------------
+  // FLOATERS
+  // ------------------------------------------------
+
+  floaters.forEach(({ mesh, wire, rot }) => {
+    mesh.rotation.x += rot.x * delta;
+    mesh.rotation.y += rot.y * delta;
+    mesh.rotation.z += rot.z * delta;
+    wire.rotation.copy(mesh.rotation);
+  });
+
+
+  // ------------------------------------------------
+  // HUD
+  // ------------------------------------------------
+
+  const isStrafe = flight.isStrafing();
+
+  cursorEl.classList.toggle('strafe', isStrafe);
+  modeEl.classList.toggle('strafe',  isStrafe);
+  modeEl.textContent = isStrafe ? 'LMB — STRAFE' : 'FREE — MOUSE';
+
+  speedFill.style.height = (spd * 100).toFixed(1) + '%';
+
+  const yawDeg = (yaw * 180 / Math.PI).toFixed(0);
+  readoutEl.innerHTML =
+    `X &nbsp;${pos.x.toFixed(1)}<br>` +
+    `Y &nbsp;${pos.y.toFixed(1)}<br>` +
+    `Z &nbsp;${pos.z.toFixed(1)}<br>` +
+    `YAW ${yawDeg}°`;
+
+
+  // ------------------------------------------------
+  // RENDER
+  // ------------------------------------------------
+
+  renderer.render(scene, camera);
+
+}
+
+animate();
+
+</script>
+</body>
+</html>
+HTMLEOF
+echo "HTML written"
+Ausgabe
+
+HTML written

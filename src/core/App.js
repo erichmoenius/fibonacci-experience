@@ -45,7 +45,14 @@ export class App {
     // 🎬 CINEMATIC CAMERA
     // ------------------------------------------------
 
-    this.cameraDirector = new CameraDirector(this.camera);
+    this.cameraDirector = new CameraDirector(
+      this.camera,
+      this.renderer.renderer.domElement,
+    );
+
+    this.cameraDirector.onReturnHome = () => {
+      this.loadGUISettings();
+    };
 
     this.exploreDirector = new ExploreDirector(this.cameraDirector);
 
@@ -63,6 +70,20 @@ export class App {
       console.log("🌌 Transit requested:", type);
 
       this.transitSystem.start(type);
+    };
+
+    // ------------------------------------------------
+    //
+    // 🧡 GATEWAY INVITATION
+    //
+    // ------------------------------------------------
+
+    this.journeyDirector.onGatewayReady = (ready, gateway) => {
+      console.log(ready ? "🧡 APP — INVITATION ON" : "🖤 APP — INVITATION OFF");
+
+      const theme = this.themeManager.activeTheme;
+
+      theme?.engine?.setInvitation(ready);
     };
 
     this.journeyDirector.onTransitEnd = () => {
@@ -419,15 +440,12 @@ export class App {
 
       (e) => {
         const x = e.clientX / window.innerWidth;
-
         const y = e.clientY / window.innerHeight;
 
         const nx = (x - 0.5) * 2;
-
         const ny = (y - 0.5) * 2;
 
         this.mouseVel.x = nx - this.mouse.x;
-
         this.mouseVel.y = ny - this.mouse.y;
 
         this.mouse.x = nx;
@@ -443,6 +461,15 @@ export class App {
       },
     );
 
+    // TEMP DEBUG
+    window.addEventListener(
+      "pointerdown",
+
+      (e) => {
+        console.log("🖱️ APP POINTER DOWN", e.pointerType, e.clientX, e.clientY);
+      },
+    );
+
     window.addEventListener(
       "wheel",
 
@@ -451,30 +478,20 @@ export class App {
       },
     );
 
+    // Journey LMB temporarily disabled
+    //
+    // IMPORTANT:
+    // Do not restore this yet.
+    // We are testing FreeFlight first.
+
+    // TEMP DEBUG
     window.addEventListener(
       "pointerdown",
 
       (e) => {
         if (e.button !== 0) return;
 
-        console.log("LMB");
-
-        const gateway = this.themeManager.activeTheme.getGateways()[0];
-
-        if (!gateway) {
-          console.log("No gateway in current theme.");
-          return;
-        }
-
-        console.log("Before travel");
-
-        this.cameraDirector.travel(gateway.entryPose);
-
-        console.log("After travel");
-
-        this.journeyDirector.begin(gateway.journey);
-
-        console.log(this.themeManager.activeTheme.engine);
+        console.log("🖱️ LMB → FreeFlight");
       },
     );
   }

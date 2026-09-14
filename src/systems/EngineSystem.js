@@ -35,6 +35,16 @@ export default class EngineSystem {
 
     this.targetTransitEnergy = 0;
 
+    // ------------------------------------------------
+    //
+    // INVITATION
+    //
+    // ------------------------------------------------
+
+    this.invitationActive = false;
+
+    this.rings = [];
+
     this.rings = [];
 
     // Material shared by all repair clamps
@@ -426,6 +436,24 @@ export default class EngineSystem {
     this.group.add(block);
 
     this.assembly.push(block);
+  }
+
+  // =====================================================
+  //
+  // INVITATION
+  //
+  // =====================================================
+
+  setInvitation(active) {
+    if (this.invitationActive === active) return;
+
+    this.invitationActive = active;
+
+    console.log(
+      active ? "🧡 ENGINE CORE — INVITATION" : "🖤 ENGINE CORE — DORMANT",
+    );
+
+    this.core.setInvitation(active);
   }
 
   // =====================================================
