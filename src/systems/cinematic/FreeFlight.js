@@ -46,6 +46,12 @@
 // CameraDirector remains the sole owner of the camera.
 //
 // =====================================================
+
+export const FreeFlightInputMode = Object.freeze({
+  FREE_MOUSE: "free-mouse",
+  CURSOR_LMB_STEER: "cursor-lmb-steer",
+});
+
 export class FreeFlight {
   constructor(travelerMode, target = window) {
     // -------------------------------------------------
@@ -65,6 +71,18 @@ export class FreeFlight {
     // -------------------------------------------------
 
     this.active = false;
+
+    // -------------------------------------------------
+    // INPUT MODE
+    // -------------------------------------------------
+    //
+    // This branch prototypes cursor-first exploration:
+    // idle mouse movement belongs to the browser cursor,
+    // while LMB temporarily provides Explore yaw/Z steering.
+    // Keep the established free-mouse model available as a
+    // direct fallback while the experiment is evaluated.
+
+    this.inputMode = FreeFlightInputMode.CURSOR_LMB_STEER;
 
     // -------------------------------------------------
     // EXPLORATION OFFSET
@@ -207,7 +225,10 @@ export class FreeFlight {
       this.pointer.lastFreeX = event.clientX;
       this.pointer.lastFreeY = event.clientY;
 
-      if (event.button === 2) {
+      if (
+        event.button === 2 &&
+        this.inputMode === FreeFlightInputMode.FREE_MOUSE
+      ) {
         console.log("🔒 REQUEST POINTER LOCK:", this.target);
 
         const result = this.target.requestPointerLock?.();
@@ -221,6 +242,11 @@ export class FreeFlight {
     };
 
     this.onPointerMove = (event) => {
+      if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+        this.handleCursorLmbSteer(event);
+        return;
+      }
+
       // ===================================================
       //
       // FREE Z TRAVEL — DESKTOP EXPERIMENT
@@ -395,6 +421,8 @@ export class FreeFlight {
       this.velocity.y = 0;
       this.velocity.z = 0;
 
+      this.look.yaw = 0;
+
       console.log("🛩️ FREEFLIGHT STOP — LMB RELEASE");
     };
 
@@ -411,6 +439,8 @@ export class FreeFlight {
       this.velocity.x = 0;
       this.velocity.y = 0;
       this.velocity.z = 0;
+
+      this.look.yaw = 0;
 
       console.log("🛩️ FREEFLIGHT CANCEL");
     };
@@ -444,6 +474,59 @@ export class FreeFlight {
       true,
     );
     document.addEventListener("pointerlockchange", this.onPointerLockChange);
+  }
+
+  // ===================================================
+  // CURSOR LMB STEER EXPERIMENT
+  // ===================================================
+
+  handleCursorLmbSteer(event) {
+    // Idle pointer movement is intentionally left to the visible browser
+    // cursor. It must not create camera yaw or depth-flight intent.
+    if (!this.pointer.active) {
+      this.input.x = 0;
+      this.input.y = 0;
+      this.input.z = 0;
+      this.look.yaw = 0;
+      return;
+    }
+
+    const moveX = event.movementX || 0;
+    const moveY = event.movementY || 0;
+
+    this.pointer.x = event.clientX;
+    this.pointer.y = event.clientY;
+    this.pointer.lastX = event.clientX;
+    this.pointer.lastY = event.clientY;
+
+    // Bypass the established LMB XY/TravelerMode path. LMB steering maps
+    // directly onto the existing Explore yaw and Z intent channels instead.
+    this.input.x = 0;
+    this.input.y = 0;
+    this.look.yaw += moveX;
+
+    const zSensitivity = 0.04;
+    const targetZ = Math.max(-1, Math.min(1, moveY * zSensitivity));
+    const zBlend = 0.22;
+
+    this.input.z += (targetZ - this.input.z) * zBlend;
+  }
+
+  setInputMode(mode) {
+    if (!Object.values(FreeFlightInputMode).includes(mode)) {
+      throw new Error(`Unknown FreeFlight input mode: ${mode}`);
+    }
+
+    this.inputMode = mode;
+
+    // A mode switch cannot carry steering motion into the next mode.
+    this.input.x = 0;
+    this.input.y = 0;
+    this.input.z = 0;
+    this.velocity.x = 0;
+    this.velocity.y = 0;
+    this.velocity.z = 0;
+    this.look.yaw = 0;
   }
 
   // ===================================================
