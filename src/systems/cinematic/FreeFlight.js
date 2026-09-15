@@ -147,6 +147,8 @@ export class FreeFlight {
     this.pointer = {
       locked: false,
       active: false,
+      rmbActive: false,
+      steeringId: null,
       dragging: false,
 
       startX: 0,
@@ -209,7 +211,41 @@ export class FreeFlight {
   // ===================================================
 
   bindInput() {
+    this.onContextMenu = (event) => {
+      if (
+        this.active &&
+        this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER
+      ) event.preventDefault();
+    };
+
+    // Observe chorded button transitions and releases outside the canvas.
+    // Only a pointerdown on the canvas can begin a steering session.
+    this.onWindowPointer = (event) => {
+      if (
+        this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER &&
+        this.pointer.steeringId === event.pointerId
+      ) this.syncSteeringButtons(event.buttons);
+    };
+    this.onWindowCancel = (event) => {
+      if (
+        this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER &&
+        this.pointer.steeringId === event.pointerId
+      ) this.clearSteering();
+    };
+    this.onWindowBlur = () => {
+      if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+        this.clearSteering();
+      }
+    };
+
     this.onPointerDown = (event) => {
+      if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+        if (!this.active || this.pointer.steeringId !== null) return;
+        this.pointer.steeringId = event.pointerId;
+        this.syncSteeringButtons(event.buttons);
+        return;
+      }
+
       this.pointer.active = event.button === 0;
       this.pointer.dragging = false;
 
@@ -407,7 +443,12 @@ export class FreeFlight {
       this.pointer.lastY = event.clientY;
     };
 
-    this.onPointerUp = () => {
+    this.onPointerUp = (event) => {
+      if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+        this.onWindowPointer(event);
+        return;
+      }
+
       this.pointer.active = false;
       this.pointer.dragging = false;
 
@@ -426,7 +467,12 @@ export class FreeFlight {
       console.log("🛩️ FREEFLIGHT STOP — LMB RELEASE");
     };
 
-    this.onPointerCancel = () => {
+    this.onPointerCancel = (event) => {
+      if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+        this.onWindowCancel(event);
+        return;
+      }
+
       this.pointer.active = false;
       this.pointer.dragging = false;
 
@@ -468,6 +514,12 @@ export class FreeFlight {
 
     this.target.addEventListener("pointercancel", this.onPointerCancel, true);
 
+    this.target.addEventListener("contextmenu", this.onContextMenu);
+    window.addEventListener("pointermove", this.onWindowPointer, true);
+    window.addEventListener("pointerup", this.onWindowPointer, true);
+    window.addEventListener("pointercancel", this.onWindowCancel, true);
+    window.addEventListener("blur", this.onWindowBlur);
+
     this.target.addEventListener(
       "pointerlockchange",
       this.onPointerLockChange,
@@ -480,16 +532,34 @@ export class FreeFlight {
   // CURSOR LMB STEER EXPERIMENT
   // ===================================================
 
-  handleCursorLmbSteer(event) {
-    // Idle pointer movement is intentionally left to the visible browser
-    // cursor. It must not create camera yaw or depth-flight intent.
+  syncSteeringButtons(buttons) {
+    this.pointer.active = (buttons & 1) !== 0;
+    this.pointer.rmbActive = (buttons & 2) !== 0;
     if (!this.pointer.active) {
-      this.input.x = 0;
-      this.input.y = 0;
       this.input.z = 0;
+      this.targetVelocity.z = 0;
+      this.velocity.z = 0;
       this.look.yaw = 0;
-      return;
     }
+    if (!this.pointer.rmbActive) {
+      this.input.y = 0;
+      this.targetVelocity.y = 0;
+      this.velocity.y = 0;
+    }
+    if (buttons === 0) this.pointer.steeringId = null;
+  }
+
+  clearSteering() {
+    this.syncSteeringButtons(0);
+    this.pointer.dragging = false;
+    this.input.x = 0;
+    this.targetVelocity.x = 0;
+    this.velocity.x = 0;
+  }
+
+  handleCursorLmbSteer(event) {
+    if (!this.active || this.pointer.steeringId !== event.pointerId) return;
+    this.syncSteeringButtons(event.buttons);
 
     const moveX = event.movementX || 0;
     const moveY = event.movementY || 0;
@@ -499,10 +569,16 @@ export class FreeFlight {
     this.pointer.lastX = event.clientX;
     this.pointer.lastY = event.clientY;
 
+    if (this.pointer.rmbActive) {
+      const ySensitivity = 0.08;
+      this.input.y = Math.max(-1, Math.min(1, moveY * ySensitivity));
+    }
+
+    if (!this.pointer.active) return;
+
     // Bypass the established LMB XY/TravelerMode path. LMB steering maps
     // directly onto the existing Explore yaw and Z intent channels instead.
     this.input.x = 0;
-    this.input.y = 0;
     this.look.yaw += moveX;
 
     const zSensitivity = 0.04;
@@ -518,6 +594,7 @@ export class FreeFlight {
     }
 
     this.inputMode = mode;
+    this.clearSteering();
 
     // A mode switch cannot carry steering motion into the next mode.
     this.input.x = 0;
@@ -560,6 +637,8 @@ export class FreeFlight {
     console.warn("🛑 FREEFLIGHT STOP", "active before:", this.active);
 
     console.trace("🛑 FREEFLIGHT STOP CALL STACK");
+
+    this.clearSteering();
 
     if (!this.active) return;
 
@@ -605,6 +684,8 @@ export class FreeFlight {
     this.pointer.active = false;
     this.pointer.dragging = false;
 
+    this.clearSteering();
+
     console.log(
       "🛩️ FREEFLIGHT RESET AFTER",
       this.offset.x,
@@ -622,7 +703,8 @@ export class FreeFlight {
 
     // Distance from the allowed boundary
     const edgeX = Math.abs(this.offset.x) / x;
-    const edgeY = Math.abs(this.offset.y) / y;
+    const yBound = this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER ? z : y;
+    const edgeY = Math.abs(this.offset.y) / yBound;
     const edgeZ = Math.abs(this.offset.z) / z;
 
     // Soft resistance begins at 70% of the boundary
@@ -747,6 +829,11 @@ export class FreeFlight {
     //
     // -------------------------------------------------
 
+    // RMB elevation bypasses the legacy XY drag gate; yaw/Z stay unchanged.
+    if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+      this.targetVelocity.y = this.pointer.rmbActive ? this.input.y * 18 : 0;
+    }
+
     const freeZDeadZone = 0.05;
 
     if (Math.abs(this.input.z) > freeZDeadZone) {
@@ -840,6 +927,11 @@ export class FreeFlight {
     this.target.removeEventListener("pointerdown", this.onPointerDown, true);
     this.target.removeEventListener("pointermove", this.onPointerMove, true);
     this.target.removeEventListener("pointerup", this.onPointerUp, true);
+    this.target.removeEventListener("contextmenu", this.onContextMenu);
+    window.removeEventListener("pointermove", this.onWindowPointer, true);
+    window.removeEventListener("pointerup", this.onWindowPointer, true);
+    window.removeEventListener("pointercancel", this.onWindowCancel, true);
+    window.removeEventListener("blur", this.onWindowBlur);
     this.target.removeEventListener(
       "pointercancel",
       this.onPointerCancel,
