@@ -542,6 +542,9 @@ export class FreeFlight {
       this.look.yaw = 0;
     }
     if (!this.pointer.rmbActive) {
+      this.input.x = 0;
+      this.targetVelocity.x = 0;
+      this.velocity.x = 0;
       this.input.y = 0;
       this.targetVelocity.y = 0;
       this.velocity.y = 0;
@@ -570,6 +573,8 @@ export class FreeFlight {
     this.pointer.lastY = event.clientY;
 
     if (this.pointer.rmbActive) {
+      const rmbXSensitivity = 0.04; // Experimental world-X tuning.
+      this.input.x = Math.max(-1, Math.min(1, -moveX * rmbXSensitivity));
       const ySensitivity = 0.08;
       this.input.y = Math.max(-1, Math.min(1, moveY * ySensitivity));
     }
@@ -578,7 +583,6 @@ export class FreeFlight {
 
     // Bypass the established LMB XY/TravelerMode path. LMB steering maps
     // directly onto the existing Explore yaw and Z intent channels instead.
-    this.input.x = 0;
     this.look.yaw += moveX;
 
     const zSensitivity = 0.04;
@@ -829,8 +833,12 @@ export class FreeFlight {
     //
     // -------------------------------------------------
 
-    // RMB elevation bypasses the legacy XY drag gate; yaw/Z stay unchanged.
+    // RMB world-X/elevation bypass the legacy XY drag gate; yaw/Z stay unchanged.
     if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+      const rmbXTargetMultiplier = 9; // Experimental world-X tuning.
+      this.targetVelocity.x = this.pointer.rmbActive
+        ? this.input.x * rmbXTargetMultiplier
+        : 0;
       this.targetVelocity.y = this.pointer.rmbActive ? this.input.y * 18 : 0;
     }
 

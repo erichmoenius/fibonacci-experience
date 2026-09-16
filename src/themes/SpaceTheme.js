@@ -108,7 +108,11 @@ export class SpaceTheme {
 
     this.gateways = [];
 
-    const gateway = new Gateway(this.engine.object.position, 1.5);
+    const gateway = new Gateway(
+      this.engine.object.position,
+      1.5,
+      this.engine.core.object,
+    );
 
     const entryPose = new CameraPose();
 

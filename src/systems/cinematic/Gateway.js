@@ -23,8 +23,9 @@ import * as THREE from "three";
 // =====================================================
 
 export default class Gateway {
-  constructor(position = new THREE.Vector3(), radius = 1) {
+  constructor(position = new THREE.Vector3(), radius = 1, target = null) {
     this.position = position.clone();
+    this.target = target;
 
     this.radius = radius;
 
@@ -36,6 +37,7 @@ export default class Gateway {
   }
 
   contains(position) {
+    this.target?.getWorldPosition(this.position);
     return this.position.distanceTo(position) <= this.radius;
   }
 }
