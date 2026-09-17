@@ -270,6 +270,14 @@ export default class CameraDirector {
 
   beginJourney(journey) {
     this.journey = journey;
+
+    this.currentPose.position.copy(this.position);
+    this.currentPose.lookTarget.copy(this.currentTarget);
+
+    this.targetPosition.copy(this.position);
+    this.lookTarget.copy(this.currentTarget);
+
+    this.setMode(CameraMode.TRAVEL);
   }
 
   isInJourney() {

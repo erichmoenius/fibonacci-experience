@@ -41,6 +41,21 @@ export class App {
     this.scene = this.renderer.scene;
     this.camera = this.renderer.camera;
 
+    this.activeGateway = null;
+
+    this.armedGateway = null;
+
+    this.acceptanceRaycaster = new THREE.Raycaster();
+
+    this.acceptancePointer = new THREE.Vector2();
+
+    this.acceptanceClick = {
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      moved: false,
+    };
+
     // ------------------------------------------------
     // 🎬 CINEMATIC CAMERA
     // ------------------------------------------------
@@ -80,6 +95,13 @@ export class App {
 
     this.journeyDirector.onGatewayReady = (ready, gateway) => {
       console.log(ready ? "🧡 APP — INVITATION ON" : "🖤 APP — INVITATION OFF");
+
+      if (ready) {
+        this.activeGateway = gateway;
+        this.armedGateway = gateway;
+      } else {
+        this.activeGateway = null;
+      }
 
       const theme = this.themeManager.activeTheme;
 
@@ -424,10 +446,20 @@ export class App {
     window.addEventListener(
       "pointerup",
 
-      () => {
+      (event) => {
         this.isBoosting = false;
+
+        this.evaluateCoreAcceptance(event);
       },
     );
+
+    window.addEventListener("pointercancel", () => {
+      this.resetAcceptanceClick();
+    });
+
+    window.addEventListener("blur", () => {
+      this.resetAcceptanceClick();
+    });
   }
 
   // ------------------------------------------------
@@ -439,6 +471,8 @@ export class App {
       "pointermove",
 
       (e) => {
+        this.trackAcceptanceMovement(e);
+
         const x = e.clientX / window.innerWidth;
         const y = e.clientY / window.innerHeight;
 
@@ -460,6 +494,10 @@ export class App {
         );
       },
     );
+
+    window.addEventListener("pointerdown", (event) => {
+      this.beginAcceptanceClick(event);
+    });
 
     // TEMP DEBUG
     window.addEventListener(
@@ -496,6 +534,95 @@ export class App {
     );
   }
 
+  beginAcceptanceClick(event) {
+    if (event.button !== 0) return;
+
+    this.acceptanceClick.pointerId = event.pointerId;
+    this.acceptanceClick.startX = event.clientX;
+    this.acceptanceClick.startY = event.clientY;
+    this.acceptanceClick.moved = false;
+  }
+
+  trackAcceptanceMovement(event) {
+    if (event.pointerId !== this.acceptanceClick.pointerId) return;
+
+    const dx = event.clientX - this.acceptanceClick.startX;
+    const dy = event.clientY - this.acceptanceClick.startY;
+    const threshold = this.cameraDirector.freeFlight.dragThreshold;
+
+    if ((event.buttons & 1) === 0) return;
+
+    if (Math.hypot(dx, dy) >= threshold) {
+      this.acceptanceClick.moved = true;
+    }
+  }
+
+  evaluateCoreAcceptance(event) {
+    const click = this.acceptanceClick;
+    const threshold = this.cameraDirector.freeFlight.dragThreshold;
+    const theme = this.themeManager.activeTheme;
+    const innerCore = theme?.engine?.core?.innerCore;
+    const canvas = this.renderer.renderer.domElement;
+    const bounds = canvas.getBoundingClientRect();
+
+    try {
+      if (
+        event.pointerId !== click.pointerId ||
+        click.moved ||
+        event.buttons !== 0 ||
+        !this.armedGateway?.journey ||
+        this.journeyDirector.isActive() ||
+        !innerCore?.visible ||
+        !bounds.width ||
+        !bounds.height
+      ) return;
+
+      const movementDistance = Math.hypot(
+        event.clientX - click.startX,
+        event.clientY - click.startY,
+      );
+
+      if (movementDistance > threshold) return;
+
+      this.acceptancePointer.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      );
+
+      this.acceptanceRaycaster.setFromCamera(
+        this.acceptancePointer,
+        this.camera,
+      );
+
+      const hits = this.acceptanceRaycaster.intersectObject(innerCore, false);
+
+      if (!hits.length) return;
+
+      console.log("JOURNEY_ACCEPTED: engine core");
+
+      const journey = this.armedGateway.journey;
+
+      this.disarmArmedInvitation();
+
+      this.cameraDirector.beginJourney(journey);
+
+      this.journeyDirector.begin(journey);
+    } finally {
+      this.resetAcceptanceClick();
+    }
+  }
+
+  resetAcceptanceClick() {
+    this.acceptanceClick.pointerId = null;
+    this.acceptanceClick.startX = 0;
+    this.acceptanceClick.startY = 0;
+    this.acceptanceClick.moved = false;
+  }
+
+  disarmArmedInvitation() {
+    this.armedGateway = null;
+  }
+
   // ------------------------------------------------
   // 🎬 THEME SWITCHING
   // ------------------------------------------------
@@ -512,6 +639,8 @@ export class App {
         if (e.code === "Digit1") {
           this.cameraDirector.cancel();
           this.journeyDirector.stop();
+          this.activeGateway = null;
+          this.disarmArmedInvitation();
 
           this.themeManager.activate("movies");
 
@@ -523,6 +652,9 @@ export class App {
         }
 
         if (e.code === "Digit2") {
+          this.activeGateway = null;
+          this.disarmArmedInvitation();
+
           this.themeManager.activate("space");
 
           this.initializeActiveTheme();
@@ -554,6 +686,7 @@ export class App {
           this.cameraDirector.returnHome();
 
           this.journeyDirector.stop();
+          this.disarmArmedInvitation();
         }
 
         // TEMP DEBUG
@@ -844,4 +977,5 @@ export class App {
 
     this.stats.end();
   }
+
 }
