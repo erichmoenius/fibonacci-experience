@@ -10,6 +10,19 @@ export default class EngineCore {
     this.ringPulse = 0;
     this.spark = 0;
     this.transitEnergy = 0;
+    this.presenceIntensity = 0;
+
+    // ------------------------------------------------
+    // CORE PRESENCE COLOR
+    // ------------------------------------------------
+
+    this.innerCoreBaseEmissiveIntensity = 0;
+
+    this.innerCorePresenceEmissiveBoost = 1.5;
+
+    this.innerCoreInvitationBaseEmissiveIntensity = 0.15;
+
+    this.innerCoreInvitationPulseEmissiveBoost = 1.5;
 
     // ------------------------------------------------
     //
@@ -61,8 +74,12 @@ export default class EngineCore {
 
       new THREE.MeshBasicMaterial({
         color: 0x020202,
+
+        depthWrite: false,
       }),
     );
+
+    this.singularity.renderOrder = 0;
 
     // ------------------------------------------------
     // ACCRETION RING
@@ -295,10 +312,20 @@ export default class EngineCore {
         32,
       ),
 
-      new THREE.MeshBasicMaterial({
-        color: 0x000000,
+      new THREE.MeshStandardMaterial({
+        color: 0x080201,
+
+        emissive: 0xff3a12,
+
+        emissiveIntensity: 0,
+
+        metalness: 0,
+
+        roughness: 0.45,
       }),
     );
+
+    this.innerCore.renderOrder = 1;
 
     this.group.add(this.innerCore);
 
@@ -412,6 +439,10 @@ export default class EngineCore {
     this.invitationActive = active;
   }
 
+  setPresenceIntensity(value) {
+    this.presenceIntensity = THREE.MathUtils.clamp(value, 0, 1);
+  }
+
   update(delta) {
     this.time += delta;
 
@@ -435,12 +466,21 @@ export default class EngineCore {
     //
     // ------------------------------------------------
 
-    if (this.invitationActive) {
-      const glow = 0.015 + invitationPulse * 0.12;
+    const presenceEmissiveIntensity =
+      this.presenceIntensity * this.innerCorePresenceEmissiveBoost;
 
-      this.innerCore.material.color.setRGB(glow, glow * 0.32, 0);
+    if (this.invitationActive) {
+      const invitationEmissiveIntensity =
+        this.innerCoreInvitationBaseEmissiveIntensity +
+        invitationPulse * this.innerCoreInvitationPulseEmissiveBoost;
+
+      this.innerCore.material.emissiveIntensity =
+        this.innerCoreBaseEmissiveIntensity +
+        presenceEmissiveIntensity +
+        invitationEmissiveIntensity;
     } else {
-      this.innerCore.material.color.set(0x000000);
+      this.innerCore.material.emissiveIntensity =
+        this.innerCoreBaseEmissiveIntensity + presenceEmissiveIntensity;
     }
 
     const breathe = 1 + Math.sin(this.time * 0.45) * 0.008;

@@ -617,6 +617,8 @@ export class App {
 
       time: this.time,
 
+      travelerPosition: this.cameraDirector.position,
+
       mouse: this.mouse,
 
       parallax: this.parallax,

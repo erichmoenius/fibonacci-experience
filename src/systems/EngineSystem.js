@@ -456,6 +456,10 @@ export default class EngineSystem {
     this.core.setInvitation(active);
   }
 
+  setPresenceIntensity(value) {
+    this.core.setPresenceIntensity(value);
+  }
+
   // =====================================================
   // UPDATE
   // =====================================================

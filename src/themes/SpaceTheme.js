@@ -39,6 +39,20 @@ export class SpaceTheme {
     this.inspectEngine = false;
 
     // ------------------------------------------------
+    // ENGINE PRESENCE EXPERIMENT
+    // ------------------------------------------------
+
+    this.presenceStartDistance = 10;
+
+    this.presenceFullDistance = 3;
+
+    this.presenceSmoothingRate = 4;
+
+    this.presenceIntensity = 0;
+
+    this.coreWorldPosition = new THREE.Vector3();
+
+    // ------------------------------------------------
     // ENGINE RELATIONSHIP
     // ------------------------------------------------
 
@@ -382,6 +396,26 @@ export class SpaceTheme {
     const audio = state.audio || {};
 
     this.engine.update(0.016);
+
+    this.engine.core.object.getWorldPosition(this.coreWorldPosition);
+
+    const presenceDistance = state.travelerPosition
+      ? state.travelerPosition.distanceTo(this.coreWorldPosition)
+      : Infinity;
+
+    const presenceTarget = THREE.MathUtils.clamp(
+      (this.presenceStartDistance - presenceDistance) /
+        (this.presenceStartDistance - this.presenceFullDistance),
+      0,
+      1,
+    );
+
+    const presenceSmoothing = 1 - Math.exp(-this.presenceSmoothingRate * 0.016);
+
+    this.presenceIntensity +=
+      (presenceTarget - this.presenceIntensity) * presenceSmoothing;
+
+    this.engine.setPresenceIntensity(this.presenceIntensity);
 
     console.log(
       "Engine object:",
