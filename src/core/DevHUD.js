@@ -48,12 +48,8 @@ export class DevHUD {
 
     this.lastUpdate = now;
 
-    const {
-      cameraDirector,
-      journeyDirector,
-      themeManager,
-      armedGateway,
-    } = this.app;
+    const { cameraDirector, journeyDirector, themeManager, armedGateway } =
+      this.app;
     const themeName = themeManager.activeThemeName ?? "-";
     const theme = themeManager.activeTheme;
     const core = theme?.engine?.core?.object;

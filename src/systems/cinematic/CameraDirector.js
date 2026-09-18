@@ -165,6 +165,26 @@ export default class CameraDirector {
 
     this.tempC = new THREE.Vector3();
 
+    this.approachStartPosition = new THREE.Vector3();
+
+    this.approachStartLookTarget = new THREE.Vector3();
+
+    this.approachDirection = new THREE.Vector3();
+
+    this.approachCorePosition = new THREE.Vector3();
+
+    this.approachTargetPosition = new THREE.Vector3();
+
+    this.approachCoreObject = null;
+
+    this.approachActive = false;
+
+    this.approachElapsed = 0;
+
+    this.approachDuration = 3;
+
+    this.approachRadius = 8.0;
+
     // ------------------------------------------------
     // SETTINGS
     // ------------------------------------------------
@@ -271,13 +291,36 @@ export default class CameraDirector {
   beginJourney(journey) {
     this.journey = journey;
 
+    this.flightSystem.stop();
+
     this.currentPose.position.copy(this.position);
-    this.currentPose.lookTarget.copy(this.currentTarget);
+
+    this.camera.getWorldDirection(this.tempA).normalize();
+
+    this.currentPose.lookTarget
+      .copy(this.position)
+      .addScaledVector(this.tempA, 10);
 
     this.targetPosition.copy(this.position);
-    this.lookTarget.copy(this.currentTarget);
+    this.lookTarget.copy(this.currentPose.lookTarget);
+    this.currentTarget.copy(this.currentPose.lookTarget);
 
     this.setMode(CameraMode.TRAVEL);
+  }
+
+  beginCoreApproach(coreObject) {
+    if (!coreObject?.getWorldPosition) return;
+
+    this.approachCoreObject = coreObject;
+    this.approachElapsed = 0;
+    this.approachStartPosition.copy(this.position);
+    this.approachStartLookTarget.copy(this.currentTarget);
+
+    coreObject.getWorldPosition(this.approachCorePosition);
+
+    this.approachDirection.set(0, 0, 1);
+
+    this.approachActive = true;
   }
 
   isInJourney() {
@@ -443,6 +486,48 @@ export default class CameraDirector {
   }
 
   updateTravel(delta) {
+    if (this.approachActive) {
+      this.approachElapsed = Math.min(
+        this.approachElapsed + delta,
+        this.approachDuration,
+      );
+
+      const progress = this.approachElapsed / this.approachDuration;
+      const eased = progress * progress * (3 - 2 * progress);
+
+      this.approachCoreObject.getWorldPosition(this.approachCorePosition);
+
+      this.approachTargetPosition
+        .copy(this.approachCorePosition)
+        .addScaledVector(this.approachDirection, this.approachRadius);
+
+      this.currentPose.position.lerpVectors(
+        this.approachStartPosition,
+        this.approachTargetPosition,
+        eased,
+      );
+
+      this.currentPose.lookTarget.lerpVectors(
+        this.approachStartLookTarget,
+        this.approachCorePosition,
+        eased,
+      );
+
+      this.position.copy(this.currentPose.position);
+      this.currentTarget.copy(this.currentPose.lookTarget);
+      this.lookTarget.copy(this.currentTarget);
+      this.targetPosition.copy(this.position);
+
+      this.applyComputedPosition();
+
+      if (progress >= 1) {
+        this.approachActive = false;
+        this.approachCoreObject = null;
+      }
+
+      return;
+    }
+
     this.position.copy(this.currentPose.position);
 
     this.applyComputedPosition();
@@ -626,6 +711,12 @@ export default class CameraDirector {
         .add(this.position);
 
       this.camera.lookAt(this.yawTarget);
+
+      return;
+    }
+
+    if (this.mode === CameraMode.TRAVEL) {
+      this.camera.lookAt(this.currentTarget);
 
       return;
     }

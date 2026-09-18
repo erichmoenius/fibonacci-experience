@@ -74,6 +74,10 @@ export class App {
 
     this.journeyDirector = new JourneyDirector(this.cameraDirector);
 
+    this.journeyDirector.onApproach = (coreObject) => {
+      this.cameraDirector.beginCoreApproach(coreObject);
+    };
+
     this.transitSystem = new TransitSystem();
 
     this.cameraDirector.journeyDirector = this.journeyDirector;
@@ -578,7 +582,8 @@ export class App {
         !innerCore?.visible ||
         !bounds.width ||
         !bounds.height
-      ) return;
+      )
+        return;
 
       const movementDistance = Math.hypot(
         event.clientX - click.startX,
@@ -603,13 +608,14 @@ export class App {
 
       console.log("JOURNEY_ACCEPTED: engine core");
 
-      const journey = this.armedGateway.journey;
+      const journeyGateway = this.armedGateway;
+      const journey = journeyGateway.journey;
 
       this.disarmArmedInvitation();
 
       this.cameraDirector.beginJourney(journey);
 
-      this.journeyDirector.begin(journey);
+      this.journeyDirector.begin(journey, journeyGateway.target);
     } finally {
       this.resetAcceptanceClick();
     }
@@ -883,6 +889,8 @@ export class App {
       this.cinematic.parallaxStrength,
     );
 
+    if (this.cameraDirector.isMode(CameraMode.TRAVEL)) return;
+
     this.cameraDirector.setLookTarget(2.8, 0, -8);
   }
 
@@ -986,5 +994,4 @@ export class App {
 
     this.stats.end();
   }
-
 }

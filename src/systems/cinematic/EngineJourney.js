@@ -28,6 +28,8 @@ export class EngineJourney extends Journey {
 
       this.phaseTime = 0;
 
+      this.emit("approach");
+
       console.log("EngineJourney → APPROACH");
     }
 
