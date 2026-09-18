@@ -1,5 +1,11 @@
 # 🌌 The Fibonacci Experience
 
+An exploratory, real-time 3D experience built with Three.js and Vite, shaped around a journey through six interconnected worlds—from cosmic space to molecular structures.
+
+The project’s vision centers on curiosity, free exploration, and the traveler’s choice to continue.
+
+[Explore the live prototype](https://prototype.thefridolin.com) · [Run locally](#local-development)
+
 <p align="center">
   <img src="docs/images/blob_1.png" width="1000">
 </p>
@@ -191,6 +197,38 @@ The remaining worlds form the larger masterplan.
 The Fibonacci sequence is not decoration.
 
 It is part of the narrative structure: emergence, growth, transformation, and return.
+
+---
+
+## Local development
+
+Install [Node.js](https://nodejs.org/) and npm using a version compatible with Vite 7, then clone the repository:
+
+```sh
+git clone https://github.com/erichmoenius/fibonacci-experience.git
+cd fibonacci-experience
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite in your terminal.
+
+### Available commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Vite development server. |
+| `npm run build` | Create a production build. |
+| `npm run preview` | Serve the production build locally for review. |
+
+To check a production build locally:
+
+```sh
+npm run build
+npm run preview
+```
+
+Run the build before starting the preview server. The preview command is for local review; deployment is a separate step.
 
 ---
 
