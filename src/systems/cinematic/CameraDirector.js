@@ -107,12 +107,14 @@ export default class CameraDirector {
     this.flightSystem.onFinished = () => {
       console.log("🎉 Flight finished.");
 
-      if (this.mode === CameraMode.TRAVEL) {
+      if (this.mode === CameraMode.TRAVEL && !this.journey) {
         this.finishTravel();
       }
 
-      this.setMode(CameraMode.EXPLORE);
-      this.onFlightFinished?.();
+      if (!this.journey) {
+        this.setMode(CameraMode.EXPLORE);
+        this.onFlightFinished?.();
+      }
     };
     // ------------------------------------------------
     // CAMERA OFFSET
@@ -441,7 +443,7 @@ export default class CameraDirector {
     flight.startPose.copy(this.currentPose);
     flight.targetPose.copy(targetPose);
 
-    flight.duration = 2.0;
+    flight.duration = this.journey ? 3.0 : 2.0;
 
     return flight;
   }
@@ -706,7 +708,26 @@ export default class CameraDirector {
   }
 
   finishTravel() {
+    this.freeFlight.reset();
+
+    this.camera.getWorldDirection(this.tempA).normalize();
+    this.exploreForward.copy(this.tempA);
+    this.exploreForward.y = 0;
+
+    if (this.exploreForward.lengthSq() > 0.000001) {
+      this.exploreForward.normalize();
+    }
+
+    this.yaw = 0;
+
     this.basePosition.copy(this.position);
+
+    this.journey = null;
+    this.approachActive = false;
+    this.horizonActive = false;
+    this.crossingActive = false;
+    this.approachCoreObject = null;
+    this.crossingCoreObject = null;
 
     this.setMode(CameraMode.EXPLORE);
   }
@@ -716,13 +737,15 @@ export default class CameraDirector {
   update(delta = 0.016) {
     this.time += delta;
 
+    const flight = this.flightSystem.flight;
+
     // Update cinematic flight system
     this.flightSystem.update(delta);
 
-    const flight = this.flightSystem.flight;
+    const flightFinished = flight && !this.flightSystem.flight;
 
     if (flight) {
-      const t = this.flightSystem.getProgress();
+      const t = flightFinished ? 1 : this.flightSystem.getProgress();
 
       let progress = t;
 
@@ -736,7 +759,14 @@ export default class CameraDirector {
         progress,
       );
 
+      this.currentPose.lookTarget.lerpVectors(
+        flight.startPose.lookTarget,
+        flight.targetPose.lookTarget,
+        progress,
+      );
+
       this.targetPosition.copy(this.currentPose.position);
+      this.lookTarget.copy(this.currentPose.lookTarget);
     }
 
     // this.currentTarget.lerp(this.lookTarget, this.lookDamping);

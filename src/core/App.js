@@ -143,6 +143,11 @@ export class App {
       console.log("✨ BIRTH");
 
       this.themeManager.activate("movies");
+      this.activeGateway = null;
+      this.armedGateway = null;
+      this.journeyDirector.setGateways(
+        this.themeManager.activeTheme.getGateways(),
+      );
 
       const pose = this.themeManager.activeTheme?.getHomePose();
 

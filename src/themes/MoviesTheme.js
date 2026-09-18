@@ -259,9 +259,9 @@ export class MoviesTheme {
 
   getHomePose() {
     return {
-      position: new THREE.Vector3(0, 0, 3.0),
+      position: new THREE.Vector3(0, 0, 5.0),
 
-      lookTarget: new THREE.Vector3(0, 0, -5),
+      lookTarget: new THREE.Vector3(0, 0, 0),
     };
   }
 
