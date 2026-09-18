@@ -29,6 +29,7 @@ export default class JourneyDirector {
     this.activeJourney = null;
     this.activeJourneyTarget = null;
     this.activeJourneyCrossing = null;
+    this.activeJourneyDestinationTheme = null;
 
     this.gateways = [];
 
@@ -61,7 +62,7 @@ export default class JourneyDirector {
     return this.activeJourney !== null;
   }
 
-  begin(journey, target = null, crossing = null) {
+  begin(journey, target = null, crossing = null, destinationTheme = null) {
     if (!(journey instanceof Journey)) {
       throw new Error("JourneyDirector.begin() expects a Journey.");
     }
@@ -69,6 +70,7 @@ export default class JourneyDirector {
     this.activeJourney = journey;
     this.activeJourneyTarget = target;
     this.activeJourneyCrossing = crossing;
+    this.activeJourneyDestinationTheme = destinationTheme;
 
     this.activeJourney.onEvent = (event, data) => {
       if (event === "approach") {
@@ -92,7 +94,7 @@ export default class JourneyDirector {
       }
 
       if (event === "birth") {
-        this.onBirth?.();
+        this.onBirth?.(this.activeJourneyDestinationTheme);
       }
 
       if (event === "complete") {
@@ -103,6 +105,7 @@ export default class JourneyDirector {
         this.activeJourney = null;
         this.activeJourneyTarget = null;
         this.activeJourneyCrossing = null;
+        this.activeJourneyDestinationTheme = null;
       }
     };
 
@@ -121,6 +124,7 @@ export default class JourneyDirector {
     this.activeJourney = null;
     this.activeJourneyTarget = null;
     this.activeJourneyCrossing = null;
+    this.activeJourneyDestinationTheme = null;
   }
 
   findGateway(position) {

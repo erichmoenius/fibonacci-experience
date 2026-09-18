@@ -138,6 +138,8 @@ export class SpaceTheme {
       transitDistance: 2.5,
     };
 
+    gateway.destinationTheme = "galaxy";
+
     const entryPose = new CameraPose();
 
     entryPose.position.copy(this.engine.object.position);

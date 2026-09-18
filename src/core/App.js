@@ -142,10 +142,21 @@ export class App {
       this.renderer.fadeOut(1);
     };
 
-    this.journeyDirector.onBirth = () => {
+    this.journeyDirector.onBirth = (destinationTheme) => {
       console.log("✨ BIRTH");
 
-      this.themeManager.activate("movies");
+      if (
+        !destinationTheme ||
+        !this.themeManager.themes.has(destinationTheme)
+      ) {
+        console.error(
+          "Journey destination theme is unavailable:",
+          destinationTheme,
+        );
+        return;
+      }
+
+      this.themeManager.activate(destinationTheme);
       this.activeGateway = null;
       this.armedGateway = null;
       this.journeyDirector.setGateways(
@@ -635,6 +646,7 @@ export class App {
         journey,
         journeyGateway.target,
         journeyGateway.crossing,
+        journeyGateway.destinationTheme,
       );
     } finally {
       this.resetAcceptanceClick();
