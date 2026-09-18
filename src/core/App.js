@@ -13,9 +13,12 @@ import { DevHUD } from "./DevHUD.js";
 import { ScrollController } from "../engine/ScrollController.js";
 import { ThemeManager } from "../engine/ThemeManager.js";
 
-import { SeasonsTheme } from "../themes/SeasonsTheme.js";
+import { GalaxyTheme } from "../themes/GalaxyTheme.js";
+import { PlanetaryTheme } from "../themes/PlanetaryTheme.js";
+import { EnvironmentTheme } from "../themes/EnvironmentTheme.js";
+import { HumanTheme } from "../themes/HumanTheme.js";
+import { MolecularTheme } from "../themes/MolecularTheme.js";
 import { MoviesTheme } from "../themes/MoviesTheme.js";
-import { ImageTheme } from "../themes/ImageTheme.js";
 import { SpaceTheme } from "../themes/SpaceTheme.js";
 
 import { createParticleField } from "../particles/ParticleField.js";
@@ -239,13 +242,13 @@ export class App {
       this.gui,
     );
 
-    this.themeManager.register("movies", MoviesTheme);
-
     this.themeManager.register("space", SpaceTheme);
-
-    this.themeManager.register("images", ImageTheme);
-
-    this.themeManager.register("seasons", SeasonsTheme);
+    this.themeManager.register("galaxy", GalaxyTheme);
+    this.themeManager.register("planetary", PlanetaryTheme);
+    this.themeManager.register("environment", EnvironmentTheme);
+    this.themeManager.register("human", HumanTheme);
+    this.themeManager.register("molecular", MolecularTheme);
+    this.themeManager.register("movies", MoviesTheme);
 
     // ------------------------------------------------
     // 🚀 START THEME
@@ -666,32 +669,20 @@ export class App {
           this.devHUD.toggle();
         }
 
-        if (e.code === "Digit1") {
-          this.cameraDirector.cancel();
-          this.journeyDirector.stop();
-          this.activeGateway = null;
-          this.disarmArmedInvitation();
+        const developmentThemes = {
+          Digit1: "space",
+          Digit2: "galaxy",
+          Digit3: "planetary",
+          Digit4: "environment",
+          Digit5: "human",
+          Digit6: "molecular",
+          Digit7: "movies",
+        };
 
-          this.themeManager.activate("movies");
-
-          this.initializeActiveTheme();
-
-          this.journeyDirector.setGateways(
-            this.themeManager.activeTheme.getGateways(),
-          );
-        }
-
-        if (e.code === "Digit2") {
-          this.activeGateway = null;
-          this.disarmArmedInvitation();
-
-          this.themeManager.activate("space");
-
-          this.initializeActiveTheme();
-
-          this.journeyDirector.setGateways(
-            this.themeManager.activeTheme.getGateways(),
-          );
+        const themeName = developmentThemes[e.code];
+        if (themeName) {
+          this.switchDevelopmentTheme(themeName);
+          return;
         }
 
         if (e.code === "Digit8") {
@@ -749,6 +740,29 @@ export class App {
         }
       },
     );
+  }
+
+  switchDevelopmentTheme(themeName) {
+    this.cameraDirector.cancel();
+    this.cameraDirector.finishTravel();
+    this.journeyDirector.stop();
+    this.transitSystem.stop();
+    this.journeyDirector.gatewayReady = false;
+    this.activeGateway = null;
+    this.disarmArmedInvitation();
+
+    this.themeManager.activate(themeName);
+    this.initializeActiveTheme();
+    this.journeyDirector.setGateways(
+      this.themeManager.activeTheme.getGateways(),
+    );
+
+    const pose = this.themeManager.activeTheme.getHomePose?.();
+    if (pose) {
+      this.cameraDirector.travel(pose);
+    } else {
+      this.cameraDirector.returnHome();
+    }
   }
 
   initializeActiveTheme() {
