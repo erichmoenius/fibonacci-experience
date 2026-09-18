@@ -8,6 +8,7 @@ import { Starfield } from "../graphics/Starfield.js";
 import { ThemeStage } from "../graphics/ThemeStage.js";
 
 import { Loop } from "./Loop.js";
+import { DevHUD } from "./DevHUD.js";
 
 import { ScrollController } from "../engine/ScrollController.js";
 import { ThemeManager } from "../engine/ThemeManager.js";
@@ -242,6 +243,8 @@ export class App {
     this.journeyDirector.setGateways(
       this.themeManager.activeTheme.getGateways(),
     );
+
+    this.devHUD = new DevHUD(this);
 
     // ------------------------------------------------
     // ✨ PARTICLES
@@ -636,6 +639,10 @@ export class App {
         console.log("Camera mode:", this.cameraDirector.mode);
         console.log("Journey active:", this.journeyDirector.isActive());
 
+        if (e.code === "KeyD" && !e.repeat) {
+          this.devHUD.toggle();
+        }
+
         if (e.code === "Digit1") {
           this.cameraDirector.cancel();
           this.journeyDirector.stop();
@@ -952,6 +959,8 @@ export class App {
     this.updateEnvironment();
 
     this.themeManager.update(state);
+
+    this.devHUD.update();
 
     // ------------------------------------------------
     // ✨ PARTICLES
