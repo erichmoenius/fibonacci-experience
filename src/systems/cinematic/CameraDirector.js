@@ -185,6 +185,22 @@ export default class CameraDirector {
 
     this.approachRadius = 8.0;
 
+    this.horizonStartPosition = new THREE.Vector3();
+
+    this.horizonStartLookTarget = new THREE.Vector3();
+
+    this.horizonTargetPosition = new THREE.Vector3();
+
+    this.horizonCorePosition = new THREE.Vector3();
+
+    this.horizonActive = false;
+
+    this.horizonElapsed = 0;
+
+    this.horizonDuration = 3;
+
+    this.horizonRadius = 0.75;
+
     // ------------------------------------------------
     // SETTINGS
     // ------------------------------------------------
@@ -321,6 +337,16 @@ export default class CameraDirector {
     this.approachDirection.set(0, 0, 1);
 
     this.approachActive = true;
+  }
+
+  beginCoreHorizon(coreObject) {
+    if (!coreObject?.getWorldPosition) return;
+
+    this.approachCoreObject = coreObject;
+    this.horizonElapsed = 0;
+    this.horizonStartPosition.copy(this.position);
+    this.horizonStartLookTarget.copy(this.currentTarget);
+    this.horizonActive = true;
   }
 
   isInJourney() {
@@ -523,6 +549,47 @@ export default class CameraDirector {
       if (progress >= 1) {
         this.approachActive = false;
         this.approachCoreObject = null;
+      }
+
+      return;
+    }
+
+    if (this.horizonActive) {
+      this.horizonElapsed = Math.min(
+        this.horizonElapsed + delta,
+        this.horizonDuration,
+      );
+
+      const progress = this.horizonElapsed / this.horizonDuration;
+      const eased = progress * progress * (3 - 2 * progress);
+
+      this.approachCoreObject.getWorldPosition(this.horizonCorePosition);
+
+      this.horizonTargetPosition
+        .copy(this.horizonCorePosition)
+        .addScaledVector(this.approachDirection, this.horizonRadius);
+
+      this.currentPose.position.lerpVectors(
+        this.horizonStartPosition,
+        this.horizonTargetPosition,
+        eased,
+      );
+
+      this.currentPose.lookTarget.lerpVectors(
+        this.horizonStartLookTarget,
+        this.horizonCorePosition,
+        eased,
+      );
+
+      this.position.copy(this.currentPose.position);
+      this.currentTarget.copy(this.currentPose.lookTarget);
+      this.lookTarget.copy(this.currentTarget);
+      this.targetPosition.copy(this.position);
+
+      this.applyComputedPosition();
+
+      if (progress >= 1) {
+        this.horizonActive = false;
       }
 
       return;

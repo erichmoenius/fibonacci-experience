@@ -78,6 +78,10 @@ export class App {
       this.cameraDirector.beginCoreApproach(coreObject);
     };
 
+    this.journeyDirector.onHorizon = (coreObject) => {
+      this.cameraDirector.beginCoreHorizon(coreObject);
+    };
+
     this.transitSystem = new TransitSystem();
 
     this.cameraDirector.journeyDirector = this.journeyDirector;

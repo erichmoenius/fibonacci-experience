@@ -35,6 +35,8 @@ export default class JourneyDirector {
 
     this.onApproach = null;
 
+    this.onHorizon = null;
+
     // -------------------------------------------------
     // GATEWAY STATE
     // -------------------------------------------------
@@ -67,6 +69,10 @@ export default class JourneyDirector {
     this.activeJourney.onEvent = (event, data) => {
       if (event === "approach") {
         this.onApproach?.(this.activeJourneyTarget);
+      }
+
+      if (event === "horizon") {
+        this.onHorizon?.(this.activeJourneyTarget);
       }
 
       if (event === "wormhole") {
