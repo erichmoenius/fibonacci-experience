@@ -82,6 +82,10 @@ export class App {
       this.cameraDirector.beginCoreHorizon(coreObject);
     };
 
+    this.journeyDirector.onSingularity = (crossing) => {
+      this.cameraDirector.beginCrossing(crossing);
+    };
+
     this.transitSystem = new TransitSystem();
 
     this.cameraDirector.journeyDirector = this.journeyDirector;
@@ -619,7 +623,11 @@ export class App {
 
       this.cameraDirector.beginJourney(journey);
 
-      this.journeyDirector.begin(journey, journeyGateway.target);
+      this.journeyDirector.begin(
+        journey,
+        journeyGateway.target,
+        journeyGateway.crossing,
+      );
     } finally {
       this.resetAcceptanceClick();
     }

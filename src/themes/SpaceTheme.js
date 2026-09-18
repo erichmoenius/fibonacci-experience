@@ -128,6 +128,13 @@ export class SpaceTheme {
       this.engine.core.object,
     );
 
+    gateway.crossing = {
+      target: this.engine.core.object,
+      direction: new THREE.Vector3(0, 0, 1),
+      endpointDistance: 0.75,
+      orientation: "forward",
+    };
+
     const entryPose = new CameraPose();
 
     entryPose.position.copy(this.engine.object.position);

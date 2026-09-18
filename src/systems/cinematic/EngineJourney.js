@@ -48,6 +48,8 @@ export class EngineJourney extends Journey {
 
       this.phaseTime = 0;
 
+      this.emit("singularity");
+
       console.log("EngineJourney → SINGULARITY");
     }
 

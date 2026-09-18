@@ -201,6 +201,28 @@ export default class CameraDirector {
 
     this.horizonRadius = 0.75;
 
+    this.crossingStartPosition = new THREE.Vector3();
+
+    this.crossingForward = new THREE.Vector3();
+
+    this.crossingDirection = new THREE.Vector3();
+
+    this.crossingCorePosition = new THREE.Vector3();
+
+    this.crossingTargetPosition = new THREE.Vector3();
+
+    this.crossingLookTarget = new THREE.Vector3();
+
+    this.crossingCoreObject = null;
+
+    this.crossingActive = false;
+
+    this.crossingElapsed = 0;
+
+    this.crossingDuration = 4;
+
+    this.crossingEndpointDistance = 0.75;
+
     // ------------------------------------------------
     // SETTINGS
     // ------------------------------------------------
@@ -347,6 +369,21 @@ export default class CameraDirector {
     this.horizonStartPosition.copy(this.position);
     this.horizonStartLookTarget.copy(this.currentTarget);
     this.horizonActive = true;
+  }
+
+  beginCrossing(crossing) {
+    const target = crossing?.target;
+    const direction = crossing?.direction;
+
+    if (!target?.getWorldPosition || !direction) return;
+
+    this.crossingCoreObject = target;
+    this.crossingElapsed = 0;
+    this.crossingStartPosition.copy(this.position);
+    this.camera.getWorldDirection(this.crossingForward).normalize();
+    this.crossingDirection.copy(direction).normalize();
+    this.crossingEndpointDistance = crossing.endpointDistance ?? 0.75;
+    this.crossingActive = true;
   }
 
   isInJourney() {
@@ -590,6 +627,48 @@ export default class CameraDirector {
 
       if (progress >= 1) {
         this.horizonActive = false;
+      }
+
+      return;
+    }
+
+    if (this.crossingActive) {
+      this.crossingElapsed = Math.min(
+        this.crossingElapsed + delta,
+        this.crossingDuration,
+      );
+
+      const progress = this.crossingElapsed / this.crossingDuration;
+      const eased = progress * progress * (3 - 2 * progress);
+
+      this.crossingCoreObject.getWorldPosition(this.crossingCorePosition);
+
+      this.crossingTargetPosition
+        .copy(this.crossingCorePosition)
+        .addScaledVector(
+          this.crossingDirection,
+          -this.crossingEndpointDistance,
+        );
+
+      this.currentPose.position.lerpVectors(
+        this.crossingStartPosition,
+        this.crossingTargetPosition,
+        eased,
+      );
+
+      this.position.copy(this.currentPose.position);
+      this.crossingLookTarget
+        .copy(this.position)
+        .addScaledVector(this.crossingForward, 10);
+      this.currentPose.lookTarget.copy(this.crossingLookTarget);
+      this.currentTarget.copy(this.currentPose.lookTarget);
+      this.lookTarget.copy(this.currentTarget);
+      this.targetPosition.copy(this.position);
+
+      this.applyComputedPosition();
+
+      if (progress >= 1) {
+        this.crossingActive = false;
       }
 
       return;

@@ -28,6 +28,7 @@ export default class JourneyDirector {
 
     this.activeJourney = null;
     this.activeJourneyTarget = null;
+    this.activeJourneyCrossing = null;
 
     this.gateways = [];
 
@@ -36,6 +37,8 @@ export default class JourneyDirector {
     this.onApproach = null;
 
     this.onHorizon = null;
+
+    this.onSingularity = null;
 
     // -------------------------------------------------
     // GATEWAY STATE
@@ -58,13 +61,14 @@ export default class JourneyDirector {
     return this.activeJourney !== null;
   }
 
-  begin(journey, target = null) {
+  begin(journey, target = null, crossing = null) {
     if (!(journey instanceof Journey)) {
       throw new Error("JourneyDirector.begin() expects a Journey.");
     }
 
     this.activeJourney = journey;
     this.activeJourneyTarget = target;
+    this.activeJourneyCrossing = crossing;
 
     this.activeJourney.onEvent = (event, data) => {
       if (event === "approach") {
@@ -73,6 +77,10 @@ export default class JourneyDirector {
 
       if (event === "horizon") {
         this.onHorizon?.(this.activeJourneyTarget);
+      }
+
+      if (event === "singularity") {
+        this.onSingularity?.(this.activeJourneyCrossing);
       }
 
       if (event === "wormhole") {
@@ -94,6 +102,7 @@ export default class JourneyDirector {
 
         this.activeJourney = null;
         this.activeJourneyTarget = null;
+        this.activeJourneyCrossing = null;
       }
     };
 
@@ -111,6 +120,7 @@ export default class JourneyDirector {
 
     this.activeJourney = null;
     this.activeJourneyTarget = null;
+    this.activeJourneyCrossing = null;
   }
 
   findGateway(position) {
