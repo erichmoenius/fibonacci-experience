@@ -52,6 +52,8 @@ export class SpaceTheme {
 
     this.coreWorldPosition = new THREE.Vector3();
 
+    this.transitWorldPosition = new THREE.Vector3();
+
     // ------------------------------------------------
     // ENGINE RELATIONSHIP
     // ------------------------------------------------
@@ -133,6 +135,7 @@ export class SpaceTheme {
       direction: new THREE.Vector3(0, 0, 1),
       endpointDistance: 0.75,
       orientation: "forward",
+      transitDistance: 2.5,
     };
 
     const entryPose = new CameraPose();
@@ -370,6 +373,21 @@ export class SpaceTheme {
       const wormhole = this.transitSystem.getObject();
 
       if (wormhole) {
+        const crossing = this.gateways[0]?.crossing;
+
+        crossing?.target?.getWorldPosition(this.transitWorldPosition);
+
+        if (crossing) {
+          this.transitWorldPosition.addScaledVector(
+            crossing.direction,
+            -crossing.transitDistance,
+          );
+
+          this.engine.object.worldToLocal(this.transitWorldPosition);
+          wormhole.position.copy(this.transitWorldPosition);
+          wormhole.rotation.set(0, 0, 0);
+        }
+
         this.engine.object.add(wormhole);
 
         this.wormholeAttached = true;
