@@ -104,18 +104,7 @@ export default class CameraDirector {
     // FLIGHT FINISHED
     // -------------------------------------------------
 
-    this.flightSystem.onFinished = () => {
-      console.log("🎉 Flight finished.");
-
-      if (this.mode === CameraMode.TRAVEL && !this.journey) {
-        this.finishTravel();
-      }
-
-      if (!this.journey) {
-        this.setMode(CameraMode.EXPLORE);
-        this.onFlightFinished?.();
-      }
-    };
+    // CameraDirector.update handles completion after applying the final pose.
     // ------------------------------------------------
     // CAMERA OFFSET
     // ------------------------------------------------
@@ -287,7 +276,6 @@ export default class CameraDirector {
 
   captureExploreForward() {
     this.exploreForward.subVectors(this.currentTarget, this.position);
-    this.exploreForward.y = 0;
 
     if (this.exploreForward.lengthSq() > 0.000001) {
       this.exploreForward.normalize();
@@ -392,7 +380,9 @@ export default class CameraDirector {
     return this.journey !== null;
   }
 
-  returnHome() {
+  returnHome(pose = null, immediate = false) {
+    this.flightSystem.stop();
+
     // -------------------------------------------------
     // RESET FREE FLIGHT
     // -------------------------------------------------
@@ -409,12 +399,18 @@ export default class CameraDirector {
     // RETURN HOME
     // -------------------------------------------------
 
-    this.basePosition.copy(this.homePosition);
+    this.basePosition.copy(pose?.position ?? this.homePosition);
 
     this.setMode(CameraMode.RETURN);
 
     this.targetPosition.copy(this.basePosition);
-    this.lookTarget.copy(this.homeLookTarget);
+    this.lookTarget.copy(pose?.lookTarget ?? this.homeLookTarget);
+    this.currentTarget.copy(this.lookTarget);
+
+    if (immediate) {
+      this.finishReturn();
+      this.applyComputedPosition();
+    }
   }
 
   travel(targetPose) {
@@ -701,6 +697,7 @@ export default class CameraDirector {
     this.position.copy(this.targetPosition);
 
     this.basePosition.copy(this.targetPosition);
+    this.currentTarget.copy(this.lookTarget);
 
     this.setMode(CameraMode.EXPLORE);
 
@@ -708,15 +705,17 @@ export default class CameraDirector {
   }
 
   finishTravel() {
-    this.freeFlight.reset();
-
-    this.camera.getWorldDirection(this.tempA).normalize();
-    this.exploreForward.copy(this.tempA);
-    this.exploreForward.y = 0;
-
-    if (this.exploreForward.lengthSq() > 0.000001) {
-      this.exploreForward.normalize();
+    const flight = this.flightSystem.flight;
+    if (flight) {
+      this.currentPose.copy(flight.targetPose);
+      this.flightSystem.stop();
     }
+
+    this.position.copy(this.currentPose.position);
+    this.targetPosition.copy(this.position);
+    this.lookTarget.copy(this.currentPose.lookTarget);
+    this.currentTarget.copy(this.lookTarget);
+    this.freeFlight.reset();
 
     this.yaw = 0;
 
@@ -771,6 +770,11 @@ export default class CameraDirector {
 
     // this.currentTarget.lerp(this.lookTarget, this.lookDamping);
     this.currentTarget.copy(this.lookTarget);
+
+    if (flightFinished && !this.journey) {
+      this.finishTravel();
+      this.onFlightFinished?.();
+    }
 
     switch (this.mode) {
       case CameraMode.EXPLORE:

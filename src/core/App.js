@@ -716,7 +716,8 @@ export class App {
 
         // TEMP DEBUG
         if (e.code === "Escape") {
-          this.cameraDirector.returnHome();
+          const homePose = this.themeManager.activeTheme?.getHomePose?.();
+          this.cameraDirector.returnHome(homePose);
 
           this.journeyDirector.stop();
           this.disarmArmedInvitation();
@@ -770,11 +771,7 @@ export class App {
     );
 
     const pose = this.themeManager.activeTheme.getHomePose?.();
-    if (pose) {
-      this.cameraDirector.travel(pose);
-    } else {
-      this.cameraDirector.returnHome();
-    }
+    this.cameraDirector.returnHome(pose, true);
   }
 
   initializeActiveTheme() {
@@ -785,8 +782,6 @@ export class App {
     theme.journeyDirector = this.journeyDirector;
 
     theme.transitSystem = this.transitSystem;
-
-    this.exploreDirector.setTheme(theme);
   }
 
   // ------------------------------------------------
