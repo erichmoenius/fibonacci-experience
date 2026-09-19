@@ -40,10 +40,19 @@ export class GalaxySystem {
     this.group = new THREE.Group();
     this.group.name = "SpiralGalaxy";
     this.group.position.z = -30;
+    this.group.rotation.set(-0.21, 0, -0.22);
     container.add(this.group);
 
     this.spinGroup = new THREE.Group();
-    this.group.add(this.spinGroup);
+    this.innerGroup = new THREE.Group();
+    this.outerGroup = new THREE.Group();
+    this.haloGroup = new THREE.Group();
+    this.group.add(
+      this.spinGroup,
+      this.innerGroup,
+      this.outerGroup,
+      this.haloGroup,
+    );
     this.texture = starSprite();
     this.resources = [];
 
@@ -72,7 +81,7 @@ export class GalaxySystem {
       const sprite = new THREE.Sprite(material);
       sprite.scale.set(size, size, 1);
       sprite.position.y = y;
-      this.spinGroup.add(sprite);
+      this.innerGroup.add(sprite);
       this.core.push(sprite);
       this.resources.push(material);
     }
@@ -136,12 +145,19 @@ export class GalaxySystem {
     });
     const points = new THREE.Points(geometry, material);
     points.name = kind;
-    this.spinGroup.add(points);
+    const parent = kind === "bulge" ? this.innerGroup
+      : kind === "halo" ? this.haloGroup
+      : kind === "arms" ? this.spinGroup
+      : this.outerGroup;
+    parent.add(points);
     this.resources.push(geometry, material);
   }
 
   update(delta) {
-    this.spinGroup.rotation.y += delta * 0.002;
+    this.innerGroup.rotation.y += delta * 0.0012;
+    this.spinGroup.rotation.y += delta * 0.0007;
+    this.outerGroup.rotation.y += delta * 0.00045;
+    this.haloGroup.rotation.y += delta * 0.00008;
   }
 
   destroy() {
@@ -150,5 +166,8 @@ export class GalaxySystem {
     this.texture.dispose();
     this.group.clear();
     this.spinGroup.clear();
+    this.innerGroup.clear();
+    this.outerGroup.clear();
+    this.haloGroup.clear();
   }
 }
