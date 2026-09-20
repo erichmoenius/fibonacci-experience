@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GalaxyBody } from "./GalaxyBody.js";
 
 const RADIUS = 30;
 const PALETTE = [
@@ -41,6 +42,7 @@ export class GalaxySystem {
     this.group.name = "SpiralGalaxy";
     this.group.position.z = -30;
     this.group.rotation.set(-0.21, 0, -0.22);
+    this.group.scale.setScalar(1.5);
     container.add(this.group);
 
     this.spinGroup = new THREE.Group();
@@ -53,6 +55,7 @@ export class GalaxySystem {
       this.outerGroup,
       this.haloGroup,
     );
+    this.body = new GalaxyBody(this.group);
     this.texture = starSprite();
     this.resources = [];
 
@@ -154,14 +157,16 @@ export class GalaxySystem {
   }
 
   update(delta) {
-    this.innerGroup.rotation.y += delta * 0.0012;
-    this.spinGroup.rotation.y += delta * 0.0007;
-    this.outerGroup.rotation.y += delta * 0.00045;
-    this.haloGroup.rotation.y += delta * 0.00008;
+    this.innerGroup.rotation.y += delta * 0.08;
+    this.spinGroup.rotation.y += delta * 0.044;
+    this.outerGroup.rotation.y += delta * 0.022;
+    this.haloGroup.rotation.y += delta * 0.004;
+    this.body.update(this.spinGroup.rotation.y);
   }
 
   destroy() {
     this.container.remove(this.group);
+    this.body.dispose();
     for (const resource of this.resources) resource.dispose();
     this.texture.dispose();
     this.group.clear();

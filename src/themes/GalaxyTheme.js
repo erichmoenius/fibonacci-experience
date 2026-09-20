@@ -6,6 +6,7 @@ export class GalaxyTheme extends BaseTheme {
   constructor(container, gui) {
     super(container, gui);
     this.galaxy = new GalaxySystem(container);
+    this.lastUpdateTime = null;
     // The app's separate blue spiral sits at the world origin, below this galaxy.
     this.backgroundParticleField = container.parent?.children.find(
       (object) => object.isPoints && object.geometry?.getAttribute("aHue"),
@@ -16,8 +17,13 @@ export class GalaxyTheme extends BaseTheme {
     }
   }
 
-  update() {
-    this.galaxy.update(0.016);
+  update(state) {
+    const time = state.time;
+    const delta = this.lastUpdateTime === null
+      ? 0
+      : Math.min(Math.max(time - this.lastUpdateTime, 0), 0.1);
+    this.lastUpdateTime = time;
+    this.galaxy.update(delta);
   }
 
   getEnvironment() {
@@ -26,8 +32,8 @@ export class GalaxyTheme extends BaseTheme {
 
   getHomePose() {
     return {
-      position: new THREE.Vector3(4, 25, 12),
-      lookTarget: new THREE.Vector3(21, 0, -30),
+      position: new THREE.Vector3(20, 89, -30),
+      lookTarget: new THREE.Vector3(0, 0, -30),
     };
   }
 
