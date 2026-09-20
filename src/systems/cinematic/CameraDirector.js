@@ -92,6 +92,8 @@ export default class CameraDirector {
     // -------------------------------------------------
 
     this.freeFlight = new FreeFlight(this.travelerMode, canvas);
+    this.exploreTravel = null;
+    this.travelRaycaster = new THREE.Raycaster();
 
     // CameraDirector starts in EXPLORE mode.
     // Activate FreeFlight explicitly for the initial state.
@@ -282,6 +284,12 @@ export default class CameraDirector {
     }
   }
 
+  setExploreTravel(flight) {
+    this.exploreTravel = flight;
+    this.freeFlight.reset();
+    flight?.reset();
+  }
+
   inspect(target, lookAt = null) {
     this.setMode(CameraMode.INSPECT);
 
@@ -388,6 +396,7 @@ export default class CameraDirector {
     // -------------------------------------------------
 
     this.freeFlight.reset();
+    this.exploreTravel?.reset();
 
     // -------------------------------------------------
     // RESET ORIENTATION
@@ -476,7 +485,11 @@ export default class CameraDirector {
     // FREE FLIGHT
     // -------------------------------------------------
 
-    this.freeFlight.update(delta);
+    if (this.exploreTravel) {
+      this.exploreTravel.updateAim(this.freeFlight.pointer, this.freeFlight.target);
+    } else {
+      this.freeFlight.update(delta);
+    }
 
     const flightOffset = this.freeFlight.getOffset();
 
@@ -496,6 +509,20 @@ export default class CameraDirector {
 
     lookIntent.yaw = 0;
 
+    if (this.exploreTravel) {
+      if (this.exploreTravel.hasAim) {
+        this.applyLookTarget();
+        this.camera.updateWorldMatrix(true, false);
+        this.travelRaycaster.setFromCamera(this.exploreTravel.aim, this.camera);
+      }
+      this.exploreTravel.update(
+        delta,
+        this.exploreTravel.hasAim ? this.travelRaycaster.ray.direction : null,
+        this.freeFlight.pointer.active,
+        this.freeFlight.pointer.rmbActive,
+      );
+    }
+
     // -------------------------------------------------
     // LOOK TARGET
     // -------------------------------------------------
@@ -510,9 +537,13 @@ export default class CameraDirector {
     // FREE FLIGHT OFFSET
     // -------------------------------------------------
 
-    this.position.x += flightOffset.x;
-    this.position.y += flightOffset.y;
-    this.position.z += flightOffset.z;
+    if (this.exploreTravel) {
+      this.position.add(this.exploreTravel.displacement);
+    } else {
+      this.position.x += flightOffset.x;
+      this.position.y += flightOffset.y;
+      this.position.z += flightOffset.z;
+    }
 
     // -------------------------------------------------
     // APPLY
@@ -716,6 +747,7 @@ export default class CameraDirector {
     this.lookTarget.copy(this.currentPose.lookTarget);
     this.currentTarget.copy(this.lookTarget);
     this.freeFlight.reset();
+    this.exploreTravel?.reset();
 
     this.yaw = 0;
 

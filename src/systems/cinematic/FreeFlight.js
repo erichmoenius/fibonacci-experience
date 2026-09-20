@@ -156,6 +156,7 @@ export class FreeFlight {
 
       x: 0,
       y: 0,
+      hasPosition: false,
 
       lastX: 0,
       lastY: 0,
@@ -240,8 +241,17 @@ export class FreeFlight {
 
     this.onPointerDown = (event) => {
       if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
-        if (!this.active || this.pointer.steeringId !== null) return;
-        this.pointer.steeringId = event.pointerId;
+        if (
+          !this.active ||
+          (this.pointer.steeringId !== null &&
+            this.pointer.steeringId !== event.pointerId)
+        ) return;
+        if (this.pointer.steeringId === null) {
+          this.pointer.steeringId = event.pointerId;
+        }
+        this.pointer.x = event.clientX;
+        this.pointer.y = event.clientY;
+        this.pointer.hasPosition = true;
         this.syncSteeringButtons(event.buttons);
         return;
       }
@@ -279,6 +289,9 @@ export class FreeFlight {
 
     this.onPointerMove = (event) => {
       if (this.inputMode === FreeFlightInputMode.CURSOR_LMB_STEER) {
+        this.pointer.x = event.clientX;
+        this.pointer.y = event.clientY;
+        this.pointer.hasPosition = true;
         this.handleCursorLmbSteer(event);
         return;
       }

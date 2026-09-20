@@ -157,6 +157,7 @@ export class App {
       }
 
       this.themeManager.activate(destinationTheme);
+      this.applyActiveThemeFlight();
       this.activeGateway = null;
       this.armedGateway = null;
       this.journeyDirector.setGateways(
@@ -266,6 +267,7 @@ export class App {
     // ------------------------------------------------
 
     this.themeManager.activate("space");
+    this.applyActiveThemeFlight();
 
     this.themeManager.activeTheme.journeyDirector = this.journeyDirector;
 
@@ -765,6 +767,7 @@ export class App {
     this.disarmArmedInvitation();
 
     this.themeManager.activate(themeName);
+    this.applyActiveThemeFlight();
     this.initializeActiveTheme();
     this.journeyDirector.setGateways(
       this.themeManager.activeTheme.getGateways(),
@@ -782,6 +785,10 @@ export class App {
     theme.journeyDirector = this.journeyDirector;
 
     theme.transitSystem = this.transitSystem;
+  }
+
+  applyActiveThemeFlight() {
+    this.cameraDirector.setExploreTravel(this.themeManager.activeTheme?.flight ?? null);
   }
 
   // ------------------------------------------------
