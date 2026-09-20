@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GalaxyBody } from "./GalaxyBody.js";
+import { GalaxySpecialStar } from "./GalaxySpecialStar.js";
 
 const RADIUS = 30;
 const PALETTE = [
@@ -88,6 +89,8 @@ export class GalaxySystem {
       this.core.push(sprite);
       this.resources.push(material);
     }
+
+    this.specialStar = new GalaxySpecialStar(this.spinGroup);
   }
 
   addLayer(count, kind, size, opacity) {
@@ -162,11 +165,13 @@ export class GalaxySystem {
     this.outerGroup.rotation.y += delta * 0.022;
     this.haloGroup.rotation.y += delta * 0.004;
     this.body.update(this.spinGroup.rotation.y);
+    this.specialStar.update(delta);
   }
 
   destroy() {
     this.container.remove(this.group);
     this.body.dispose();
+    this.specialStar.dispose();
     for (const resource of this.resources) resource.dispose();
     this.texture.dispose();
     this.group.clear();
