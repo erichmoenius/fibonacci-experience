@@ -42,6 +42,7 @@ export class GalaxyCosmos {
 
     this.addHaze(worldPoint, normal, random);
     this.addDistantObjects(worldPoint, normal, random);
+    this.addCuriosities(worldPoint, normal, random);
   }
 
   createSoftPointTexture() {
@@ -148,6 +149,99 @@ export class GalaxyCosmos {
       }
     }
     this.addPoints("distantCosmicObjects", positions, colors, 0.9, 0.06);
+  }
+
+  addCuriosities(worldPoint, normal, random) {
+    // One thin distant galaxy, distinct from the diffuse background smudges.
+    const edgePositions = [];
+    const edgeColors = [];
+    const cool = new THREE.Color(0xa8bddc);
+    const warm = new THREE.Color(0xf1d6bb);
+    const color = new THREE.Color();
+    for (let i = 0; i < 96; i++) {
+      const horizontalSample = normal();
+      const verticalSample = normal();
+      const depthSample = normal();
+      const variation = random();
+      const bulge = i < 24;
+      const along = bulge
+        ? horizontalSample * 0.65
+        : Math.tanh(horizontalSample * 1.1) * 8.0;
+      const taper = Math.max(0, 1 - Math.abs(along) / 8.0);
+      const position = worldPoint(
+        66 + along + 0.13 * Math.sin(along * 0.9),
+        22 + along * 0.22 + 0.16 * Math.sin(along * 0.8)
+          + verticalSample * (bulge ? 0.4 : 0.13 + 0.17 * taper),
+        89 + 0.22 * Math.cos(along * 0.5)
+          + depthSample * (bulge ? 0.9 : 0.55),
+      );
+      edgePositions.push(position.x, position.y, position.z);
+      color.copy(cool).lerp(warm, bulge ? 0.78 : 0.22 * taper)
+        .multiplyScalar(bulge
+          ? 0.75 + 0.25 * variation
+          : 0.25 + 0.42 * taper + 0.15 * variation);
+      edgeColors.push(color.r, color.g, color.b);
+    }
+    this.addPoints("edgeOnCuriosity", edgePositions, edgeColors, 1.2, 0.09);
+
+    // A compact stellar association with a dense center and real XYZ thickness.
+    const clusterPositions = [];
+    const clusterColors = [];
+    for (let i = 0; i < 130; i++) {
+      const spread = i < 100 ? 0.85 : 1.9;
+      const position = worldPoint(
+        40 + normal() * spread,
+        -14 + normal() * spread,
+        52 + normal() * spread * 1.2,
+      );
+      clusterPositions.push(position.x, position.y, position.z);
+      color.setHex(random() < 0.12 ? 0xffe5ce : 0xdceaff)
+        .multiplyScalar(0.55 + random() * 0.45);
+      clusterColors.push(color.r, color.g, color.b);
+    }
+    this.addPoints("stellarClusterCuriosity", clusterPositions, clusterColors, 0.19, 0.48);
+
+    // Broken cloudlets follow a curved path through space, not a line or tube.
+    const filamentPositions = [];
+    const filamentColors = [];
+    for (let i = 0; i < 120; i++) {
+      const t = random() * 2 - 1;
+      if (t > -0.1 && t < 0.12 && random() < 0.8) continue;
+      const position = worldPoint(
+        -73 + 10 * t + 3 * Math.sin(2.1 * t) + normal() * 0.8,
+        24 + 7 * t + 2 * Math.sin(3.4 * t + 0.4) + normal() * 0.7,
+        58 + 9 * t + 2 * Math.cos(2 * t) + normal() * 1.8,
+      );
+      filamentPositions.push(position.x, position.y, position.z);
+      const brightSegment = Math.exp(-Math.pow((t + 0.58) / 0.23, 2))
+        + 0.8 * Math.exp(-Math.pow((t - 0.55) / 0.2, 2));
+      color.setHex(0xa4b4d2)
+        .multiplyScalar(0.3 + random() * 0.3 + 0.35 * Math.min(1, brightSegment));
+      filamentColors.push(color.r, color.g, color.b);
+    }
+    this.addPoints("filamentCuriosity", filamentPositions, filamentColors, 1.4, 0.045);
+
+    // A separate dusty cloud uses offset lobes and varied depth, without a plane.
+    const cloudPositions = [];
+    const cloudColors = [];
+    const lobes = [
+      [-2.2, 0.9, -2, 0x8d8aa7],
+      [1.8, -1.3, 2.5, 0xa79aa2],
+      [0.2, 2.3, 5, 0xa79c8d],
+    ];
+    for (const [x, y, depth, tint] of lobes) {
+      for (let i = 0; i < 50; i++) {
+        const position = worldPoint(
+          20 + x + normal() * 2.3,
+          -38 + y + normal() * 1.7,
+          42 + depth + normal() * 2.8,
+        );
+        cloudPositions.push(position.x, position.y, position.z);
+        color.setHex(tint).multiplyScalar(0.35 + random() * 0.35);
+        cloudColors.push(color.r, color.g, color.b);
+      }
+    }
+    this.addPoints("dustCloudCuriosity", cloudPositions, cloudColors, 2.7, 0.035);
   }
 
   dispose() {

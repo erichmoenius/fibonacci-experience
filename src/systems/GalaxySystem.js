@@ -254,10 +254,10 @@ export class GalaxySystem {
   }
 
   update(delta) {
-    this.innerGroup.rotation.y -= delta * 0.08;
-    this.spinGroup.rotation.y -= delta * 0.044;
-    this.outerGroup.rotation.y -= delta * 0.022;
-    this.haloGroup.rotation.y -= delta * 0.004;
+    this.innerGroup.rotation.y -= delta * 0.0544;
+    this.spinGroup.rotation.y -= delta * 0.02992;
+    this.outerGroup.rotation.y -= delta * 0.01496;
+    this.haloGroup.rotation.y -= delta * 0.00272;
     this.body.update(this.spinGroup.rotation.y);
     this.specialStar.update(delta);
   }
