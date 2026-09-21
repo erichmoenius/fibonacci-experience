@@ -94,6 +94,8 @@ export default class CameraDirector {
     this.freeFlight = new FreeFlight(this.travelerMode, canvas);
     this.exploreTravel = null;
     this.travelRaycaster = new THREE.Raycaster();
+    this.strafeRight = new THREE.Vector3();
+    this.strafeUp = new THREE.Vector3();
 
     // CameraDirector starts in EXPLORE mode.
     // Activate FreeFlight explicitly for the initial state.
@@ -286,6 +288,7 @@ export default class CameraDirector {
 
   setExploreTravel(flight) {
     this.exploreTravel = flight;
+    this.freeFlight.galaxyPrecisionStrafe = Boolean(flight);
     this.freeFlight.reset();
     flight?.reset();
   }
@@ -485,8 +488,13 @@ export default class CameraDirector {
     // FREE FLIGHT
     // -------------------------------------------------
 
+    const strafing = Boolean(this.exploreTravel &&
+      this.freeFlight.pointer.active && this.freeFlight.pointer.rmbActive);
     if (this.exploreTravel) {
-      this.exploreTravel.updateAim(this.freeFlight.pointer, this.freeFlight.target);
+      this.exploreTravel.updateStrafePointer(this.freeFlight.pointer, strafing);
+      if (!strafing) {
+        this.exploreTravel.updateAim(this.freeFlight.pointer, this.freeFlight.target);
+      }
     } else {
       this.freeFlight.update(delta);
     }
@@ -501,7 +509,7 @@ export default class CameraDirector {
 
     const yawSensitivity = 0.002;
 
-    if (lookIntent.yaw !== 0) {
+    if (lookIntent.yaw !== 0 && !strafing) {
       this.yaw += lookIntent.yaw * yawSensitivity;
     }
 
@@ -510,16 +518,20 @@ export default class CameraDirector {
     lookIntent.yaw = 0;
 
     if (this.exploreTravel) {
-      if (this.exploreTravel.hasAim) {
-        this.applyLookTarget();
-        this.camera.updateWorldMatrix(true, false);
+      this.applyLookTarget();
+      this.camera.updateWorldMatrix(true, false);
+      if (this.exploreTravel.hasAim && !strafing) {
         this.travelRaycaster.setFromCamera(this.exploreTravel.aim, this.camera);
       }
+      this.strafeRight.set(1, 0, 0).transformDirection(this.camera.matrixWorld);
+      this.strafeUp.set(0, 1, 0).transformDirection(this.camera.matrixWorld);
       this.exploreTravel.update(
         delta,
-        this.exploreTravel.hasAim ? this.travelRaycaster.ray.direction : null,
+        this.exploreTravel.hasAim && !strafing ? this.travelRaycaster.ray.direction : null,
         this.freeFlight.pointer.active,
         this.freeFlight.pointer.rmbActive,
+        this.strafeRight,
+        this.strafeUp,
       );
     }
 

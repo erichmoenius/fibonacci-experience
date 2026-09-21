@@ -83,6 +83,7 @@ export class FreeFlight {
     // direct fallback while the experiment is evaluated.
 
     this.inputMode = FreeFlightInputMode.CURSOR_LMB_STEER;
+    this.galaxyPrecisionStrafe = false;
 
     // -------------------------------------------------
     // EXPLORATION OFFSET
@@ -584,6 +585,10 @@ export class FreeFlight {
     this.pointer.y = event.clientY;
     this.pointer.lastX = event.clientX;
     this.pointer.lastY = event.clientY;
+
+    if (this.galaxyPrecisionStrafe && this.pointer.active && this.pointer.rmbActive) {
+      return;
+    }
 
     if (this.pointer.rmbActive) {
       const rmbXSensitivity = 0.04; // Experimental world-X tuning.

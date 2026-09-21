@@ -11,6 +11,9 @@ export class GalaxyFlight {
     this.maxForwardSpeed = 11;
     this.maxReverseSpeed = 5;
     this.braking = 10;
+    this.strafeSensitivity = 0.01;
+    this.strafeMaxPixelsPerFrame = 24;
+    this.strafeBraking = 40;
     this.lowSpeedSteering = 5;
     this.highSpeedSteering = 2;
 
@@ -22,6 +25,25 @@ export class GalaxyFlight {
     this.lateralVelocity = new THREE.Vector3();
     this.displacement = new THREE.Vector3();
     this.nextDisplacement = new THREE.Vector3();
+    this.strafeDelta = new THREE.Vector2();
+    this.strafePointer = new THREE.Vector2();
+    this.strafing = false;
+  }
+
+  updateStrafePointer(pointer, active) {
+    this.strafeDelta.set(0, 0);
+    if (!active || !pointer.hasPosition) {
+      this.strafing = false;
+      return;
+    }
+    if (this.strafing) {
+      this.strafeDelta.set(
+        THREE.MathUtils.clamp(pointer.x - this.strafePointer.x, -this.strafeMaxPixelsPerFrame, this.strafeMaxPixelsPerFrame),
+        THREE.MathUtils.clamp(pointer.y - this.strafePointer.y, -this.strafeMaxPixelsPerFrame, this.strafeMaxPixelsPerFrame),
+      );
+    }
+    this.strafePointer.set(pointer.x, pointer.y);
+    this.strafing = true;
   }
 
   updateAim(pointer, canvas) {
@@ -35,8 +57,8 @@ export class GalaxyFlight {
     this.hasAim = true;
   }
 
-  update(delta, rayDirection, thrusting, braking) {
-    if (this.hasAim) {
+  update(delta, rayDirection, thrusting, braking, cameraRight, cameraUp) {
+    if (this.hasAim && !this.strafing) {
       this.desiredDirection.copy(rayDirection).normalize();
       if (this.steeredDirection.lengthSq() === 0) {
         this.steeredDirection.copy(this.desiredDirection);
@@ -55,9 +77,12 @@ export class GalaxyFlight {
     }
 
     const speed = this.velocity.length();
-    if (braking && thrusting) {
+    if (!thrusting && !braking) {
+      this.velocity.set(0, 0, 0);
+      this.lateralVelocity.set(0, 0, 0);
+    } else if (braking && thrusting) {
       this.velocity.multiplyScalar(
-        speed > 0 ? Math.max(0, speed - this.braking * delta) / speed : 0,
+        speed > 0 ? Math.max(0, speed - this.strafeBraking * delta) / speed : 0,
       );
     } else if (braking && this.hasAim) {
       let alongAim = this.velocity.dot(this.steeredDirection);
@@ -81,6 +106,11 @@ export class GalaxyFlight {
     }
 
     this.nextDisplacement.copy(this.displacement).addScaledVector(this.velocity, delta);
+    if (this.strafing) {
+      this.nextDisplacement
+        .addScaledVector(cameraRight, -this.strafeDelta.x * this.strafeSensitivity)
+        .addScaledVector(cameraUp, this.strafeDelta.y * this.strafeSensitivity);
+    }
     if (this.nextDisplacement.length() > this.travelLimit) {
       this.nextDisplacement.setLength(this.travelLimit);
       const outwardSpeed = this.velocity.dot(this.nextDisplacement) / this.travelLimit;
@@ -100,5 +130,8 @@ export class GalaxyFlight {
     this.lateralVelocity.set(0, 0, 0);
     this.displacement.set(0, 0, 0);
     this.nextDisplacement.set(0, 0, 0);
+    this.strafeDelta.set(0, 0);
+    this.strafePointer.set(0, 0);
+    this.strafing = false;
   }
 }
