@@ -34,8 +34,8 @@ export class GalaxyTheme extends BaseTheme {
 
   getHomePose() {
     return {
-      position: new THREE.Vector3(20, 89, -30),
-      lookTarget: new THREE.Vector3(0, 0, -30),
+      position: new THREE.Vector3(28, 22, 12),
+      lookTarget: new THREE.Vector3(18, 0, -27),
     };
   }
 
