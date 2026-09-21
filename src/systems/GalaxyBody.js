@@ -14,6 +14,8 @@ const vertexShader = `
 const fragmentShader = `
   uniform float uOpacity;
   uniform float uPhase;
+  uniform vec4 uActivity[5];
+  uniform vec3 uActivityColor[5];
   varying vec2 vDiskPosition;
   varying vec3 vWorldPosition;
 
@@ -66,7 +68,10 @@ const fragmentShader = `
     float center = 0.28 * exp(-radius * radius / 65.0);
     float edge = 1.0 - smoothstep(27.0, 36.0, radius);
     float cloud = 0.68 + 0.50 * broadNoise + 0.24 * fineNoise;
-    float density = (disk * (0.19 + 0.86 * arms * armLight) * cloud + center) * edge;
+    float segmentEnergy = mix(0.48, 1.45, smoothstep(0.28, 0.72,
+      noise(vDiskPosition * 0.075 + vec2(24.0, -9.0))));
+    float density = (disk * (0.19 + 0.86 * arms * armLight * segmentEnergy)
+      * cloud + center) * edge;
 
     // Broken dust complexes absorb light instead of painting black bands.
     float laneWarp = (noise(vDiskPosition * 0.12 + vec2(13.0, -7.0)) - 0.5)
@@ -97,6 +102,35 @@ const fragmentShader = `
     color = mix(color, vec3(1.0, 0.55, 0.69), 0.33 * forming);
     density *= 1.0 + 0.25 * forming;
 
+    // Five unequal cloud complexes share their centers with the stellar layer.
+    // Each has a neighboring dust pocket that removes light rather than adding black.
+    float activeLight = 0.0;
+    float dustPocket = 0.0;
+    vec3 emission = vec3(0.0);
+    for (int i = 0; i < 5; i++) {
+      vec2 relative = vDiskPosition - uActivity[i].xy;
+      vec2 radial = normalize(uActivity[i].xy);
+      vec2 tangent = vec2(-radial.y, radial.x);
+      float along = dot(relative, tangent) / (uActivity[i].z * 1.65);
+      float across = dot(relative, radial) / (uActivity[i].z * 0.72);
+      float shape = along * along + across * across;
+      float cloudiness = 0.55 + 0.45 * noise(vDiskPosition * 0.36 + float(i) * 7.0);
+      float glow = exp(-shape * 1.6) * cloudiness * uActivity[i].w;
+      activeLight += glow;
+      emission += glow * uActivityColor[i];
+
+      vec2 dusty = relative - tangent * uActivity[i].z * 1.2
+        - radial * uActivity[i].z * 0.5;
+      float dustAlong = dot(dusty, tangent) / (uActivity[i].z * 1.4);
+      float dustAcross = dot(dusty, radial) / (uActivity[i].z * 0.75);
+      float dustShape = dustAlong * dustAlong + dustAcross * dustAcross;
+      dustPocket += exp(-dustShape * 1.7) * cloudiness;
+    }
+    density *= (1.0 + 2.2 * activeLight)
+      * (1.0 - min(0.7, 0.75 * dustPocket));
+    color = mix(color, emission / max(activeLight, 0.001),
+      min(0.72, activeLight * 0.8));
+
     float closeFade = smoothstep(2.5, 9.0,
       length(cameraPosition - vWorldPosition));
     gl_FragColor = vec4(color, uOpacity * density * closeFade);
@@ -104,7 +138,7 @@ const fragmentShader = `
 `;
 
 export class GalaxyBody {
-  constructor(parent) {
+  constructor(parent, activityRegions) {
     this.group = new THREE.Group();
     this.group.name = "GalaxyBody";
     parent.add(this.group);
@@ -112,6 +146,11 @@ export class GalaxyBody {
     this.geometry = new THREE.PlaneGeometry(76, 76);
     this.geometry.rotateX(-Math.PI / 2);
     this.materials = [];
+    const activity = activityRegions.map(([radius, arm, offset, strength, , size]) => {
+      const angle = arm * Math.PI / 2 + 2.5 * Math.log1p(radius / 2) + offset;
+      return new THREE.Vector4(radius * Math.cos(angle), radius * Math.sin(angle), size, strength);
+    });
+    const activityColors = activityRegions.map(([, , , , hex]) => new THREE.Color(hex));
 
     for (const [height, phase, opacity] of [
       [-0.9, -0.035, 0.12],
@@ -124,6 +163,8 @@ export class GalaxyBody {
         uniforms: {
           uOpacity: { value: opacity },
           uPhase: { value: phase },
+          uActivity: { value: activity },
+          uActivityColor: { value: activityColors },
         },
         transparent: true,
         blending: THREE.AdditiveBlending,

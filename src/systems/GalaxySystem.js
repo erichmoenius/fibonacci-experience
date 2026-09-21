@@ -11,6 +11,18 @@ const PALETTE = [
   new THREE.Color(0x729ed6),
 ];
 
+// Radius, arm, angular offset, activity, tint, hero cloud radius.
+const FORMING_REGIONS = [
+  [9.5, 0, 0.16, 0.7, 0xffdfb6, 0],
+  [13.8, 0, -0.08, 1.0, 0xe9a0bc, 3.0],
+  [18.4, 0, 0.22, 0.8, 0xd990bd, 2.5],
+  [23.6, 0, -0.15, 0.45, 0xc1b7ea, 0],
+  [16.2, 1, 0.13, 0.35, 0xe5a5c6, 0],
+  [25.1, 2, -0.21, 0.9, 0xb7d6ff, 2.8],
+  [19.7, 3, -0.11, 0.55, 0xc5bce9, 2.6],
+  [27.2, 3, 0.18, 0.75, 0xc3ddff, 2.2],
+];
+
 function gaussian() {
   return Math.sqrt(-2 * Math.log(Math.max(Math.random(), 1e-6))) *
     Math.cos(2 * Math.PI * Math.random());
@@ -56,7 +68,7 @@ export class GalaxySystem {
       this.outerGroup,
       this.haloGroup,
     );
-    this.body = new GalaxyBody(this.group);
+    this.body = new GalaxyBody(this.group, FORMING_REGIONS.filter((region) => region[5] > 0));
     this.texture = starSprite();
     this.resources = [];
 
@@ -67,6 +79,7 @@ export class GalaxySystem {
     this.addLayer(10000, "bulge", 0.3, 0.85);
     this.addLayer(5000, "halo", 0.18, 0.35);
     this.addLayer(13000, "clouds", 1.8, 0.065);
+    this.addStarFormingRegions();
 
     this.core = [];
     for (const [size, opacity, y] of [
@@ -157,6 +170,87 @@ export class GalaxySystem {
       : this.outerGroup;
     parent.add(points);
     this.resources.push(geometry, material);
+  }
+
+  addStarFormingRegions() {
+    // A few unequal arm locations; these are separate from the global layers.
+    let seed = 73819;
+    const random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 4294967296);
+    const normal = () => Math.sqrt(-2 * Math.log(Math.max(random(), 1e-6)))
+      * Math.cos(2 * Math.PI * random());
+    const layers = [
+      { name: "formingGas", positions: [], colors: [], size: 2.1, opacity: 0.055 },
+      { name: "formingStars", positions: [], colors: [], size: 0.32, opacity: 0.62 },
+      { name: "heroGas", positions: [], colors: [], size: 3.4, opacity: 0.12 },
+    ];
+    const base = new THREE.Color();
+    const tint = new THREE.Color();
+    const pointColor = new THREE.Color();
+    const white = new THREE.Color(0xffffff);
+
+    for (const [radius, arm, offset, activity, hex, heroRadius] of FORMING_REGIONS) {
+      const angle = arm * Math.PI / 2 + 2.5 * Math.log1p(radius / 2) + offset;
+      const radialX = Math.cos(angle);
+      const radialZ = Math.sin(angle);
+      const tangentX = -radialZ;
+      const tangentZ = radialX;
+      colorAt(radius, base);
+      tint.setHex(hex);
+      const lobes = 2 + Math.floor(random() * 3);
+
+      for (let lobe = 0; lobe < lobes; lobe++) {
+        const lobeAlong = normal() * (0.45 + activity * 0.45);
+        const lobeAcross = normal() * 0.28;
+        const width = (0.25 + random() * 0.55) * (0.65 + activity * 0.4);
+        const length = (0.45 + random() * 0.9) * (0.7 + activity * 0.5);
+
+        for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+          if (layerIndex === 2 && heroRadius === 0) continue;
+          const layer = layers[layerIndex];
+          const count = Math.round(activity * (layerIndex === 0 ? 20 + random() * 18
+            : layerIndex === 1 ? 4 + random() * 7 : 11 + random() * 9));
+          for (let i = 0; i < count; i++) {
+            const spread = layerIndex === 0 ? 1 : layerIndex === 1 ? 0.38 : 1.65;
+            const across = lobeAcross + normal() * width * spread;
+            const along = lobeAlong + normal() * length * spread;
+            layer.positions.push(
+              radius * radialX + across * radialX + along * tangentX,
+              normal() * (0.3 + radius * 0.025),
+              radius * radialZ + across * radialZ + along * tangentZ,
+            );
+            pointColor.copy(base).lerp(tint, layerIndex === 1 ? 0.32 : 0.72);
+            if (layerIndex === 1) pointColor.lerp(white, 0.3);
+            const variation = layerIndex === 1 ? 0.65 + random() * 0.35 : 0.4 + random() * 0.45;
+            layer.colors.push(
+              pointColor.r * variation,
+              pointColor.g * variation,
+              pointColor.b * variation,
+            );
+          }
+        }
+      }
+    }
+
+    for (const layer of layers) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(layer.positions, 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(layer.colors, 3));
+      geometry.computeBoundingSphere();
+      const material = new THREE.PointsMaterial({
+        size: layer.size,
+        map: this.texture,
+        vertexColors: true,
+        transparent: true,
+        opacity: layer.opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true,
+      });
+      const points = new THREE.Points(geometry, material);
+      points.name = layer.name;
+      this.spinGroup.add(points);
+      this.resources.push(geometry, material);
+    }
   }
 
   update(delta) {
