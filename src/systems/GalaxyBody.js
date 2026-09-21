@@ -37,30 +37,49 @@ const fragmentShader = `
     float angle = atan(vDiskPosition.y, vDiskPosition.x);
     float broadNoise = noise(vDiskPosition * 0.13);
     float fineNoise = noise(vDiskPosition * 0.39 + 17.0);
-    float irregularity = (broadNoise - 0.5) * 0.32
-      + (fineNoise - 0.5) * 0.10;
-    float spiral = angle - 2.5 * log(1.0 + radius / 2.0)
-      + irregularity + uPhase;
-    float arms = pow(0.5 + 0.5 * cos(4.0 * spiral), 1.35);
+
+    // Broad warps break the repeated arm spacing without changing arm count.
+    float middle = smoothstep(6.0, 13.0, radius)
+      * (1.0 - smoothstep(27.0, 35.0, radius));
+    float outer = smoothstep(22.0, 33.0, radius);
+    float warpScale = 0.28 + 0.50 * middle + 0.38 * outer;
+    float radialWarp = (noise(vDiskPosition * 0.075 + vec2(4.0, 11.0)) - 0.5)
+      * (0.8 + 1.5 * middle + 1.2 * outer);
+    float angularWarp = (noise(vDiskPosition * 0.11 + vec2(-13.0, 3.0)) - 0.5)
+      * warpScale;
+    float spiral = angle - 2.5 * log(1.0 + max(0.0, radius + radialWarp) / 2.0)
+      + angularWarp + uPhase;
+    float armShape = 0.5 + 0.5 * cos(4.0 * spiral);
+    float armWidth = mix(0.9, 2.3,
+      noise(vDiskPosition * 0.12 + vec2(19.0, -4.0)));
+    float arms = pow(armShape, armWidth);
+
+    // Cloud-sized gaps and sector variation leave the core comparatively dense.
+    float cloudMask = noise(vDiskPosition * 0.105 + vec2(-7.0, 23.0));
+    float fragments = smoothstep(0.27, 0.67, cloudMask);
+    float sector = noise(vec2(cos(angle), sin(angle)) * 1.35 + vec2(9.0, 5.0));
+    float armLight = mix(0.88, mix(0.28, 1.15, fragments),
+      min(1.0, 0.15 + 0.65 * middle + 0.72 * outer));
+    armLight *= mix(0.86, 1.12, sector);
 
     float disk = exp(-pow(radius / 27.0, 1.5));
     float center = 0.28 * exp(-radius * radius / 65.0);
     float edge = 1.0 - smoothstep(27.0, 36.0, radius);
     float cloud = 0.68 + 0.50 * broadNoise + 0.24 * fineNoise;
-    float density = (disk * (0.19 + 0.86 * arms) * cloud + center) * edge;
+    float density = (disk * (0.19 + 0.86 * arms * armLight) * cloud + center) * edge;
 
-    // A displaced seam dims the luminous arm instead of drawing dark geometry.
-    float laneWarp = (noise(vDiskPosition * 0.22 + vec2(13.0, -7.0)) - 0.5)
-      * 0.20;
-    float laneWidth = mix(4.5, 8.0,
+    // Broken dust complexes absorb light instead of painting black bands.
+    float laneWarp = (noise(vDiskPosition * 0.12 + vec2(13.0, -7.0)) - 0.5)
+      * 0.58;
+    float laneWidth = mix(3.0, 11.0,
       noise(vDiskPosition * 0.16 + vec2(-5.0, 19.0)));
     float seam = pow(0.5 + 0.5 * cos(4.0 * (spiral - 0.23 + laneWarp)),
       laneWidth);
     float laneRegion = smoothstep(3.0, 7.0, radius)
       * (1.0 - smoothstep(20.0, 31.0, radius));
-    float gaps = 0.45 + 0.55 * smoothstep(0.26, 0.60,
-      noise(vDiskPosition * 0.27 + vec2(8.0, -12.0)));
-    float laneStrength = 0.96 * (0.78 + 0.22 * fineNoise);
+    float gaps = smoothstep(0.32, 0.68,
+      noise(vDiskPosition * 0.11 + vec2(8.0, -12.0)));
+    float laneStrength = 0.88 * mix(0.72, 1.0, sector);
     density *= 1.0 - laneStrength * seam * laneRegion * gaps;
 
     vec3 warm = vec3(1.0, 0.87, 0.69);
