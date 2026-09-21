@@ -2,11 +2,13 @@ import * as THREE from "three";
 import { BaseTheme } from "./BaseTheme.js";
 import { GalaxySystem } from "../systems/GalaxySystem.js";
 import { GalaxyFlight } from "../systems/GalaxyFlight.js";
+import { GalaxyCosmos } from "../systems/GalaxyCosmos.js";
 
 export class GalaxyTheme extends BaseTheme {
   constructor(container, gui) {
     super(container, gui);
     this.galaxy = new GalaxySystem(container);
+    this.cosmos = new GalaxyCosmos(container, this.getHomePose());
     this.flight = new GalaxyFlight(this.galaxy.group);
     this.lastUpdateTime = null;
     // The app's separate blue spiral sits at the world origin, below this galaxy.
@@ -44,6 +46,7 @@ export class GalaxyTheme extends BaseTheme {
   }
 
   destroy() {
+    this.cosmos.dispose();
     this.galaxy.destroy();
     if (this.backgroundParticleField) {
       this.backgroundParticleField.visible = this.backgroundParticleFieldWasVisible;
