@@ -82,7 +82,7 @@ The Fibonacci Experience is a journey through six worlds.
     back to 1 or 2
 ```
 
-The worlds are different expressions of one underlying story.
+The worlds offer pieces of a visual rebus, without prescribing how they fit together.
 
 There is no fixed destination.
 
@@ -91,6 +91,29 @@ There is no fixed destination.
 ## ✨ The Idea
 
 The experience is not a game and not a conventional website.
+
+It is an interactive visual riddle. Relationships, recurring structures, and changes of scale emerge through exploration rather than explanation.
+
+> **Every world moves differently. Explore. Adapt.**
+
+Movement is part of the riddle. Each world has its own physical logic; the Traveller observes, experiments, and adapts. Controls need not be exhaustively tutorialized when they can be discovered. Essential interactions should remain fair and discoverable, while deeper interactions may be left to find. **Esc** is the one universal interaction: it always brings the Traveller home.
+
+> **Don't explain what can be discovered.**
+
+The six worlds offer pieces of the rebus:
+
+```text
+Space
+→ Galaxy
+→ Planetary
+→ Environment
+→ Human
+→ Molecular
+→ Fibonacci
+→ ?
+```
+
+Their recurring patterns invite connections, but no definitive interpretation is supplied.
 
 There are no objectives to complete and no path that must be followed.
 
@@ -102,9 +125,7 @@ The journey exists only through the choice to explore it.
 
 And at the end:
 
-> **There is no answer.**
->
-> **Or maybe… the answer is ?**
+> **?**
 
 ---
 
@@ -194,9 +215,7 @@ The remaining worlds form the larger masterplan.
                         1         2
 ```
 
-The Fibonacci sequence is not decoration.
-
-It is part of the narrative structure: emergence, growth, transformation, and return.
+The recurring structure is part of the experience; what it suggests remains open to the Traveller.
 
 ---
 
