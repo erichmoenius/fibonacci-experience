@@ -10,42 +10,26 @@ The projectâ€™s vision centers on curiosity, free exploration, and the travelerâ
   <img src="docs/images/blob_1.png" width="1000">
 </p>
 
-<p align="center">
-  <strong>Welcome, traveler.</strong>
-</p>
+**Welcome, traveler.**
 
-<p align="center">
-  There are no objectives here.<br>
-  Nothing will chase you.<br>
-  Nothing requires your attention.
-</p>
+There are no objectives here.\
+Nothing will chase you.\
+Nothing requires your attention.
 
-<p align="center">
-  <em>Explore freely.</em>
-</p>
+*Explore freely.*
 
-<p align="center">
-  Some places hold deeper experiences.<br>
-  If you feel drawn to one, approach it.
-</p>
+Some places hold deeper experiences.\
+If you feel drawn to one, approach it.
 
-<p align="center">
-  When you are ready, press the left mouse button<br>
-  or tap the screen on your mobile.
-</p>
+**Every world moves differently.**\
+**Explore. Adapt.**
 
-<p align="center">
-  To return, press <strong>Esc</strong> or <strong>Back</strong>.
-</p>
+To return, press **Esc** or **Back**.
 
-<p align="center">
-  That's all.<br>
-  Nothing more.
-</p>
+That's all.\
+Nothing more.
 
-<p align="center">
-  <strong>The journey will begin only by your choice.</strong>
-</p>
+**The journey will begin only by your choice.**
 
 ---
 
