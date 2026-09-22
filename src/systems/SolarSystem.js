@@ -14,6 +14,8 @@ export const SOLAR_DISPLAY = Object.freeze({
   earthOrbitRadius: 22,
   moonOrbitRadius: 4.2,
   simulationDaysPerSecond: 1.5,
+  // Cinematic axial spin only; scientific periods and orbital timing stay intact.
+  visualSelfRotationScale: 0.05,
 });
 
 // NASA planetary fact sheet values, rounded to useful precision. The signed
@@ -312,9 +314,9 @@ export class SolarSystem {
     const days = delta * SOLAR_DISPLAY.simulationDaysPerSecond;
     for (const { definition, orbit, body } of this.planets.values()) {
       orbit.rotation.y += TAU * days / definition.orbitDays;
-      body.rotation.y += TAU * days * 24 / definition.rotationHours;
+      body.rotation.y += TAU * days * 24 / definition.rotationHours * SOLAR_DISPLAY.visualSelfRotationScale;
     }
-    this.clouds.rotation.y += TAU * days * 24 / SOLAR_PERIODS.earthRotationHours * 0.94;
+    this.clouds.rotation.y += TAU * days * 24 / SOLAR_PERIODS.earthRotationHours * SOLAR_DISPLAY.visualSelfRotationScale * 0.94;
     this.moonOrbit.rotation.y += TAU * days / SOLAR_PERIODS.moonOrbitDays;
     this.sun.rotation.y += delta * 0.015;
   }
