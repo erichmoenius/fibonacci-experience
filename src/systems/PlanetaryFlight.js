@@ -6,6 +6,8 @@ export class PlanetaryFlight {
     this.kind = "heliocentric";
     this.solarSystem = solarSystem;
     this.angularSensitivity = 0.002; // Radians per horizontal pointer pixel.
+    this.verticalSensitivity = 0.05; // World units per vertical pointer pixel.
+    this.verticalLimit = 60; // Symmetric world-Y offset from the Sun.
     this.lookResponse = 3;
     this.center = new THREE.Vector3();
     this.position = new THREE.Vector3();
@@ -13,10 +15,27 @@ export class PlanetaryFlight {
     this.reset();
   }
 
-  updatePose(delta, horizontalMovement, held, currentPosition, currentLookTarget) {
+  updatePose(
+    delta,
+    horizontalMovement,
+    verticalPointerY,
+    held,
+    currentPosition,
+    currentLookTarget,
+  ) {
     // No inertia: release freezes both the reached position and look target.
-    if (!held) return this.started;
-    if (!this.started && horizontalMovement === 0) return false;
+    if (!held) {
+      this.lastPointerY = null;
+      return this.started;
+    }
+
+    const verticalMovement = this.lastPointerY === null
+      ? 0
+      : verticalPointerY - this.lastPointerY;
+    this.lastPointerY = verticalPointerY;
+    if (!this.started && horizontalMovement === 0 && verticalMovement === 0) {
+      return false;
+    }
 
     this.solarSystem.getSunWorldPosition(this.center);
     if (!this.started) {
@@ -31,6 +50,11 @@ export class PlanetaryFlight {
 
     // Unbounded angle allows repeated full turns in either direction.
     this.angle += horizontalMovement * this.angularSensitivity;
+    this.height = THREE.MathUtils.clamp(
+      this.height - verticalMovement * this.verticalSensitivity,
+      -this.verticalLimit,
+      this.verticalLimit,
+    );
     this.position.set(
       this.center.x + Math.sin(this.angle) * this.radius,
       this.center.y + this.height,
@@ -46,6 +70,7 @@ export class PlanetaryFlight {
     this.radius = 0;
     this.angle = 0;
     this.height = 0;
+    this.lastPointerY = null;
     this.position.set(0, 0, 0);
     this.lookTarget.set(0, 0, 0);
   }

@@ -484,7 +484,8 @@ export default class CameraDirector {
       const lookIntent = this.freeFlight.getLookIntent();
       const flight = this.exploreTravel;
       const hasPose = flight.updatePose(
-        delta, lookIntent.yaw, this.freeFlight.pointer.active,
+        delta, lookIntent.yaw, this.freeFlight.pointer.y,
+        this.freeFlight.pointer.active,
         this.position, this.currentTarget,
       );
       lookIntent.yaw = 0;
