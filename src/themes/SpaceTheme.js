@@ -241,6 +241,8 @@ export class SpaceTheme {
 
       stars: false,
 
+      legacyStars: true,
+
       portal: false,
 
       stage: true,

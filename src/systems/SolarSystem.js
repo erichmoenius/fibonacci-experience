@@ -310,6 +310,10 @@ export class SolarSystem {
     }
   }
 
+  getSunWorldPosition(target) {
+    return this.sun.getWorldPosition(target);
+  }
+
   update(delta) {
     const days = delta * SOLAR_DISPLAY.simulationDaysPerSecond;
     for (const { definition, orbit, body } of this.planets.values()) {

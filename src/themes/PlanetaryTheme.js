@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import { BaseTheme } from "./BaseTheme.js";
 import { SolarSystem } from "../systems/SolarSystem.js";
+import { PlanetaryFlight } from "../systems/PlanetaryFlight.js";
 
 export class PlanetaryTheme extends BaseTheme {
   constructor(container, gui) {
     super(container, gui);
     this.solarSystem = new SolarSystem(container);
+    this.flight = new PlanetaryFlight(this.solarSystem);
     this.lastUpdateTime = null;
     this.backgroundParticleField = container.parent?.children.find(
       (object) => object.isPoints && object.geometry?.getAttribute("aHue"),

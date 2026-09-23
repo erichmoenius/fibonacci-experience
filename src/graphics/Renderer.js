@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { CelestialStarfield } from "../systems/CelestialStarfield.js";
 export class Renderer {
   constructor() {
     // ------------------------------------------------
@@ -6,6 +7,7 @@ export class Renderer {
     // ------------------------------------------------
 
     this.scene = new THREE.Scene();
+    this.celestialStarfield = new CelestialStarfield();
 
     this.camera = new THREE.PerspectiveCamera(
       60,
@@ -124,6 +126,24 @@ export class Renderer {
   // RENDER PIPELINE
   // ------------------------------------------------
 
+  renderScene() {
+    if (!this.celestialStarfield.active) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    const autoClear = this.renderer.autoClear;
+    this.renderer.autoClear = false;
+    try {
+      this.renderer.clear();
+      this.celestialStarfield.render(this.renderer, this.camera);
+      this.renderer.clearDepth();
+      this.renderer.render(this.scene, this.camera);
+    } finally {
+      this.renderer.autoClear = autoClear;
+    }
+  }
+
   render() {
     console.log("RENDER");
     // PASS 1 → Scene in Texture (ohne Portal)
@@ -131,12 +151,12 @@ export class Renderer {
 
     this.renderer.setRenderTarget(this.renderTarget);
     this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
+    this.renderScene();
 
     // PASS 2 → normale Szene
     if (this.portal) this.portal.mesh.visible = true;
 
     this.renderer.setRenderTarget(null);
-    this.renderer.render(this.scene, this.camera);
+    this.renderScene();
   }
 }

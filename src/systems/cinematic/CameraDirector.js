@@ -288,7 +288,7 @@ export default class CameraDirector {
 
   setExploreTravel(flight) {
     this.exploreTravel = flight;
-    this.freeFlight.galaxyPrecisionStrafe = Boolean(flight);
+    this.freeFlight.galaxyPrecisionStrafe = Boolean(flight && flight.kind !== "heliocentric");
     this.freeFlight.reset();
     flight?.reset();
   }
@@ -480,6 +480,25 @@ export default class CameraDirector {
   // =====================================================
 
   updateExplore(delta) {
+    if (this.exploreTravel?.kind === "heliocentric") {
+      const lookIntent = this.freeFlight.getLookIntent();
+      const flight = this.exploreTravel;
+      const hasPose = flight.updatePose(
+        delta, lookIntent.yaw, this.freeFlight.pointer.active,
+        this.position, this.currentTarget,
+      );
+      lookIntent.yaw = 0;
+      if (hasPose) {
+        this.position.copy(flight.position);
+        this.currentTarget.copy(flight.lookTarget);
+        this.lookTarget.copy(this.currentTarget);
+      }
+      // No global idle float, yaw, or depth input on the fixed Planetary orbit.
+      this.channels.cinematic.set(0, 0, 0);
+      this.applyComputedPosition();
+      return;
+    }
+
     const floatY = Math.sin(this.time * this.floatSpeed) * this.floatStrength;
 
     this.channels.cinematic.set(0, floatY, 0);
@@ -927,6 +946,11 @@ export default class CameraDirector {
 
   applyLookTarget() {
     if (!this.camera) return;
+
+    if (this.mode === CameraMode.EXPLORE && this.exploreTravel?.kind === "heliocentric") {
+      this.camera.lookAt(this.currentTarget);
+      return;
+    }
 
     if (this.mode === CameraMode.EXPLORE) {
       this.yawTarget

@@ -833,9 +833,13 @@ export class App {
 
     this.world.setActive(env.world ?? true);
 
-    if (this.stars?.points) {
-      this.stars.points.visible = env.stars ?? true;
-    }
+    this.renderer.celestialStarfield.setTheme(this.themeManager.activeThemeName);
+    // CelestialStarfield is only the distant sky. Themes may keep the legacy
+    // local field in front of it; themes without the celestial sky retain the
+    // legacy behavior by default.
+    this.stars.setVisible(
+      env.legacyStars ?? !this.renderer.celestialStarfield.active,
+    );
 
     if (this.stage?.mesh) {
       this.stage.mesh.visible = env.stage ?? true;

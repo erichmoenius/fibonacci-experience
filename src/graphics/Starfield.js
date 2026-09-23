@@ -18,6 +18,12 @@ this.near = this.createLayer(2000,100);
 
 
 
+setVisible(visible){
+  for (const layer of [this.micro, this.far, this.mid, this.near]) {
+    layer.visible = visible;
+  }
+}
+
 createLayer(count,spread){
 
 const geometry = new THREE.BufferGeometry();
