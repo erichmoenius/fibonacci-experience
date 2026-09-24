@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PlanetaryOpticalSky } from "./PlanetaryOpticalSky.js";
 
 export const CELESTIAL_PROFILES = Object.freeze({
   space: { columns: 80, rows: 40, brightness: 0.9, seed: 81473 },
@@ -18,6 +19,7 @@ export class CelestialStarfield {
     this.active = false;
     this.themeName = null;
     this.texture = this.createPointTexture();
+    this.planetaryOpticalSky = null;
   }
 
   createPointTexture() {
@@ -43,6 +45,12 @@ export class CelestialStarfield {
     const profile = CELESTIAL_PROFILES[name];
     this.active = Boolean(profile);
     if (!profile) return;
+
+    if (name === "planetary") {
+      this.planetaryOpticalSky = new PlanetaryOpticalSky();
+      this.scene.add(this.planetaryOpticalSky.group);
+      return;
+    }
 
     let seed = profile.seed;
     const random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 4294967296);
@@ -87,6 +95,7 @@ export class CelestialStarfield {
 
   render(renderer, viewCamera) {
     if (!this.active) return;
+    this.planetaryOpticalSky?.setPixelRatio(renderer.getPixelRatio());
     // Rotation/projection only: translation cannot approach or leave the sky.
     // Star positions remain fixed; the viewing camera stays at the sphere center.
     viewCamera.getWorldQuaternion(this.camera.quaternion);
@@ -96,6 +105,8 @@ export class CelestialStarfield {
   }
 
   clearStars() {
+    this.planetaryOpticalSky?.dispose();
+    this.planetaryOpticalSky = null;
     for (const points of this.scene.children) {
       points.geometry.dispose();
       points.material.dispose();
