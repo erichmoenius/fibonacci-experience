@@ -483,10 +483,16 @@ export default class CameraDirector {
     if (this.exploreTravel?.kind === "heliocentric") {
       const lookIntent = this.freeFlight.getLookIntent();
       const flight = this.exploreTravel;
+      this.camera.getWorldDirection(this.tempA).normalize();
+      this.tempB.set(1, 0, 0).transformDirection(this.camera.matrixWorld);
       const hasPose = flight.updatePose(
-        delta, lookIntent.yaw, this.freeFlight.pointer.y,
+        delta, lookIntent.yaw,
+        this.freeFlight.pointer.x, this.freeFlight.pointer.y,
         this.freeFlight.pointer.active,
+        this.freeFlight.pointer.rmbActive,
         this.position, this.currentTarget,
+        this.tempA,
+        this.tempB,
       );
       lookIntent.yaw = 0;
       if (hasPose) {
