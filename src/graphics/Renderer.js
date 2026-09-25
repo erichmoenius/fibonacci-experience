@@ -1,5 +1,27 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { FullScreenQuad, Pass } from "three/addons/postprocessing/Pass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import {
+  PLANETARY_BLOOM_LAYER,
+  PLANETARY_SELECTIVE_BLOOM,
+} from "../config/PlanetarySelectiveBloomConfig.js";
 import { CelestialStarfield } from "../systems/CelestialStarfield.js";
+
+class SelectiveBloomScenePass extends Pass {
+  constructor(owner) {
+    super();
+    this.owner = owner;
+    this.needsSwap = false;
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    renderer.setRenderTarget(this.renderToScreen ? null : readBuffer);
+    renderer.clear();
+    this.owner.renderBloomScene();
+  }
+}
+
 export class Renderer {
   constructor() {
     // ------------------------------------------------
@@ -17,6 +39,8 @@ export class Renderer {
     );
 
     this.camera.position.set(0, 0, 5);
+    this.bloomCamera = this.camera.clone();
+    this.bloomCamera.layers.set(PLANETARY_BLOOM_LAYER);
 
     // ------------------------------------------------
     // WEBGL RENDERER
@@ -29,6 +53,46 @@ export class Renderer {
 
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    this.bloomEnabled = false;
+    this.bloomSettings = PLANETARY_SELECTIVE_BLOOM;
+    this.bloomComposer = new EffectComposer(this.renderer);
+    this.bloomComposer.renderToScreen = false;
+    this.bloomComposer.addPass(new SelectiveBloomScenePass(this));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      this.bloomSettings.strength,
+      this.bloomSettings.radius,
+      this.bloomSettings.threshold,
+    );
+    this.bloomComposer.addPass(this.bloomPass);
+    this.bloomComposite = new FullScreenQuad(new THREE.ShaderMaterial({
+      uniforms: {
+        uBloomTexture: { value: this.bloomComposer.renderTarget2.texture },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position.xy, 0.0, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uBloomTexture;
+        varying vec2 vUv;
+
+        void main() {
+          gl_FragColor = texture2D(uBloomTexture, vUv);
+          #include <colorspace_fragment>
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    }));
 
     // ------------------------------------------------
     // RENDER TARGET (für Portal)
@@ -100,7 +164,12 @@ export class Renderer {
 
       this.renderer.setSize(w, h);
       this.renderTarget.setSize(w, h);
+      this.bloomComposer.setSize(w, h);
     });
+  }
+
+  setBloomEnabled(enabled) {
+    this.bloomEnabled = Boolean(enabled) && this.bloomSettings.enabled;
   }
   // ------------------------------------------------
   // CINEMATIC FADE API
@@ -144,6 +213,25 @@ export class Renderer {
     }
   }
 
+  renderBloomScene() {
+    const autoClear = this.renderer.autoClear;
+    this.bloomCamera.copy(this.camera, false);
+    this.bloomCamera.layers.set(PLANETARY_BLOOM_LAYER);
+    this.renderer.autoClear = false;
+    try {
+      this.renderer.clear();
+      this.celestialStarfield.render(
+        this.renderer,
+        this.bloomCamera,
+        1 << PLANETARY_BLOOM_LAYER,
+      );
+      this.renderer.clearDepth();
+      this.renderer.render(this.scene, this.bloomCamera);
+    } finally {
+      this.renderer.autoClear = autoClear;
+    }
+  }
+
   render() {
     console.log("RENDER");
     // PASS 1 → Scene in Texture (ohne Portal)
@@ -158,5 +246,13 @@ export class Renderer {
 
     this.renderer.setRenderTarget(null);
     this.renderScene();
+    if (!this.bloomEnabled) return;
+
+    this.bloomComposer.render();
+    this.renderer.setRenderTarget(null);
+    const autoClear = this.renderer.autoClear;
+    this.renderer.autoClear = false;
+    this.bloomComposite.render(this.renderer);
+    this.renderer.autoClear = autoClear;
   }
 }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { CELESTIAL_DISCOVERIES } from "../config/CelestialDiscoveries.js";
+import { PLANETARY_BLOOM_LAYER } from "../config/PlanetarySelectiveBloomConfig.js";
 
 export const PLANETARY_OPTICAL_SKY = Object.freeze({
   generatedStarCount: 7500,
@@ -124,7 +125,7 @@ export class PlanetaryOpticalSky {
     };
     this.startedAt = performance.now();
 
-    const geometry = this.createGeometry();
+    const { geometry, bloomGeometry } = this.createGeometry();
     this.uniforms = {
       uPixelRatio: { value: 1 },
       uTime: { value: 0 },
@@ -209,6 +210,55 @@ export class PlanetaryOpticalSky {
     this.points = new THREE.Points(geometry, material);
     this.points.name = "PlanetaryOpticalStars";
     this.group.add(this.points);
+
+    const bloomMaterial = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: `
+        uniform float uPixelRatio;
+        attribute float aSize;
+        attribute vec3 aStarColor;
+        attribute float aBurst;
+        varying vec3 vStarColor;
+        varying float vBurst;
+
+        void main() {
+          vStarColor = aStarColor;
+          vBurst = aBurst;
+          gl_PointSize = max(1.0, aSize * uPixelRatio);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+        varying vec3 vStarColor;
+        varying float vBurst;
+
+        void main() {
+          vec2 offset = gl_PointCoord - 0.5;
+          float radiusSquared = dot(offset, offset);
+          float aperture = 1.0 - smoothstep(0.4, 0.5, sqrt(radiusSquared));
+          if (aperture <= 0.0001) discard;
+          float core = exp(-radiusSquared * 92.0);
+          float halo = exp(-radiusSquared * 18.0);
+          float horizontal = exp(-abs(offset.y) * 120.0) * exp(-abs(offset.x) * 8.0);
+          float vertical = exp(-abs(offset.x) * 120.0) * exp(-abs(offset.y) * 8.0);
+          float burst = (horizontal + vertical) * vBurst * 0.42;
+          vec3 color = mix(vStarColor, vec3(1.0), 0.5);
+          vec3 light = color * (core * 4.8 + halo * 1.6 + burst * 2.4) * aperture;
+          gl_FragColor = vec4(light, 1.0);
+          #include <colorspace_fragment>
+        }
+      `,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    this.bloomPoints = new THREE.Points(bloomGeometry, bloomMaterial);
+    this.bloomPoints.name = "PlanetaryJewelBloom";
+    this.bloomPoints.layers.set(PLANETARY_BLOOM_LAYER);
+    this.group.add(this.bloomPoints);
   }
 
   createGeometry() {
@@ -503,10 +553,42 @@ export class PlanetaryOpticalSky {
     );
     geometry.setAttribute("aGlintEligible", new THREE.Float32BufferAttribute(glintEligibility, 1));
     geometry.computeBoundingSphere();
+
+    const bloomIndices = glintEligibility
+      .map((eligible, vertexIndex) => ({ eligible, vertexIndex }))
+      .filter(({ eligible }) => eligible === 1)
+      .sort((left, right) => brightnesses[right.vertexIndex] - brightnesses[left.vertexIndex]);
+    const strongestBloomIndices = new Set(
+      bloomIndices.slice(0, 6).map(({ vertexIndex }) => vertexIndex),
+    );
+    const bloomPositions = [];
+    const bloomSizes = [];
+    const bloomColors = [];
+    const bloomBursts = [];
+    for (const { vertexIndex } of bloomIndices) {
+      bloomPositions.push(...positions.slice(vertexIndex * 3, vertexIndex * 3 + 3));
+      bloomSizes.push(sizes[vertexIndex] * 1.65);
+      bloomColors.push(...colors.slice(vertexIndex * 3, vertexIndex * 3 + 3));
+      bloomBursts.push(strongestBloomIndices.has(vertexIndex) ? 1 : 0);
+    }
+    const bloomGeometry = new THREE.BufferGeometry();
+    bloomGeometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(bloomPositions, 3),
+    );
+    bloomGeometry.setAttribute("aSize", new THREE.Float32BufferAttribute(bloomSizes, 1));
+    bloomGeometry.setAttribute(
+      "aStarColor",
+      new THREE.Float32BufferAttribute(bloomColors, 3),
+    );
+    bloomGeometry.setAttribute("aBurst", new THREE.Float32BufferAttribute(bloomBursts, 1));
+    bloomGeometry.computeBoundingSphere();
+    this.bloomStarCount = bloomIndices.length;
+    this.burstStarCount = strongestBloomIndices.size;
     this.generatedStarCount = PLANETARY_OPTICAL_SKY.generatedStarCount;
     this.catalogStarCount = catalogStars.length;
     this.totalStarCount = sizes.length;
-    return geometry;
+    return { geometry, bloomGeometry };
   }
 
   setPixelRatio(pixelRatio) {
@@ -518,6 +600,8 @@ export class PlanetaryOpticalSky {
     this.group.removeFromParent();
     this.points.geometry.dispose();
     this.points.material.dispose();
+    this.bloomPoints.geometry.dispose();
+    this.bloomPoints.material.dispose();
     this.group.clear();
   }
 }

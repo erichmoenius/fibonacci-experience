@@ -93,12 +93,13 @@ export class CelestialStarfield {
     }
   }
 
-  render(renderer, viewCamera) {
+  render(renderer, viewCamera, layerMask = viewCamera.layers.mask) {
     if (!this.active) return;
     this.planetaryOpticalSky?.setPixelRatio(renderer.getPixelRatio());
     // Rotation/projection only: translation cannot approach or leave the sky.
     // Star positions remain fixed; the viewing camera stays at the sphere center.
     viewCamera.getWorldQuaternion(this.camera.quaternion);
+    this.camera.layers.mask = layerMask;
     this.camera.projectionMatrix.copy(viewCamera.projectionMatrix);
     this.camera.projectionMatrixInverse.copy(viewCamera.projectionMatrixInverse);
     renderer.render(this.scene, this.camera);

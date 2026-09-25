@@ -834,6 +834,7 @@ export class App {
     this.world.setActive(env.world ?? true);
 
     this.renderer.celestialStarfield.setTheme(this.themeManager.activeThemeName);
+    this.renderer.setBloomEnabled(this.themeManager.activeThemeName === "planetary");
     // CelestialStarfield is only the distant sky. Themes may keep the legacy
     // local field in front of it; themes without the celestial sky retain the
     // legacy behavior by default.
