@@ -93,9 +93,7 @@ export default class CameraDirector {
 
     this.freeFlight = new FreeFlight(this.travelerMode, canvas);
     this.exploreTravel = null;
-    this.travelRaycaster = new THREE.Raycaster();
     this.strafeRight = new THREE.Vector3();
-    this.strafeUp = new THREE.Vector3();
 
     // CameraDirector starts in EXPLORE mode.
     // Activate FreeFlight explicitly for the initial state.
@@ -514,13 +512,17 @@ export default class CameraDirector {
     // FREE FLIGHT
     // -------------------------------------------------
 
-    const strafing = Boolean(this.exploreTravel &&
+    const chorded = Boolean(this.exploreTravel &&
       this.freeFlight.pointer.active && this.freeFlight.pointer.rmbActive);
+    const lmbOrbiting = Boolean(this.exploreTravel &&
+      this.freeFlight.pointer.active && !this.freeFlight.pointer.rmbActive);
+    const rmbTraveling = Boolean(this.exploreTravel &&
+      !this.freeFlight.pointer.active && this.freeFlight.pointer.rmbActive);
     if (this.exploreTravel) {
-      this.exploreTravel.updateStrafePointer(this.freeFlight.pointer, strafing);
-      if (!strafing) {
-        this.exploreTravel.updateAim(this.freeFlight.pointer, this.freeFlight.target);
-      }
+      this.exploreTravel.updateRmbPointer(
+        this.freeFlight.pointer,
+        rmbTraveling,
+      );
     } else {
       this.freeFlight.update(delta);
     }
@@ -528,6 +530,7 @@ export default class CameraDirector {
     const flightOffset = this.freeFlight.getOffset();
 
     const lookIntent = this.freeFlight.getLookIntent();
+    const horizontalMovement = lookIntent.yaw;
 
     // -------------------------------------------------
     // FREE LOOK — HORIZONTAL YAW
@@ -535,7 +538,7 @@ export default class CameraDirector {
 
     const yawSensitivity = 0.002;
 
-    if (lookIntent.yaw !== 0 && !strafing) {
+    if (lookIntent.yaw !== 0 && !this.exploreTravel) {
       this.yaw += lookIntent.yaw * yawSensitivity;
     }
 
@@ -544,32 +547,27 @@ export default class CameraDirector {
     lookIntent.yaw = 0;
 
     if (this.exploreTravel) {
+      this.tempC.copy(this.position);
       this.applyLookTarget();
       this.camera.updateWorldMatrix(true, false);
-      if (this.exploreTravel.hasAim && !strafing) {
-        this.travelRaycaster.setFromCamera(this.exploreTravel.aim, this.camera);
-      }
+      this.camera.getWorldDirection(this.tempA).normalize();
       this.strafeRight.set(1, 0, 0).transformDirection(this.camera.matrixWorld);
-      this.strafeUp.set(0, 1, 0).transformDirection(this.camera.matrixWorld);
+      this.setPosition(this.time, 0);
       this.exploreTravel.update(
         delta,
-        this.exploreTravel.hasAim && !strafing ? this.travelRaycaster.ray.direction : null,
-        this.freeFlight.pointer.active,
-        this.freeFlight.pointer.rmbActive,
+        horizontalMovement,
+        this.freeFlight.pointer.y,
+        lmbOrbiting,
+        rmbTraveling,
+        chorded,
+        this.tempC,
+        this.position,
+        this.tempA,
         this.strafeRight,
-        this.strafeUp,
       );
+    } else {
+      this.setPosition(this.time, 0);
     }
-
-    // -------------------------------------------------
-    // LOOK TARGET
-    // -------------------------------------------------
-
-    // -------------------------------------------------
-    // BASE EXPLORE POSITION
-    // -------------------------------------------------
-
-    this.setPosition(this.time, 0);
 
     // -------------------------------------------------
     // FREE FLIGHT OFFSET

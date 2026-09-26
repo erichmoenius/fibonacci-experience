@@ -6,132 +6,218 @@ export class GalaxyFlight {
   constructor(galaxyRoot) {
     const worldScale = galaxyRoot.getWorldScale(new THREE.Vector3()).x;
     this.travelLimit = GALAXY_RADIUS * worldScale * 4;
-    this.forwardAcceleration = 3;
-    this.reverseAcceleration = 4.5;
-    this.maxForwardSpeed = 11;
-    this.maxReverseSpeed = 5;
-    this.braking = 10;
-    this.strafeSensitivity = 0.01;
-    this.strafeMaxPixelsPerFrame = 24;
-    this.strafeBraking = 40;
-    this.lowSpeedSteering = 5;
-    this.highSpeedSteering = 2;
+    this.orbitAngularSensitivity = 0.002;
+    this.orbitElevationSensitivity = 0.002;
+    this.orbitElevationLimit = Math.PI / 2 - 0.01;
+    this.rmbAcceleration = 7;
+    this.rmbMaxSpeed = 6;
+    this.rmbBraking = 11;
+    this.rmbThrustSensitivity = 0.08;
+    this.rmbStrafeSensitivity = 0.08;
+    this.rmbDeadZone = 3;
+    this.rmbStopEpsilon = 0.01;
 
-    this.aim = new THREE.Vector2();
-    this.hasAim = false;
-    this.desiredDirection = new THREE.Vector3();
-    this.steeredDirection = new THREE.Vector3();
-    this.velocity = new THREE.Vector3();
-    this.lateralVelocity = new THREE.Vector3();
+    this.orbitCenter = galaxyRoot.getWorldPosition(new THREE.Vector3());
+    this.orbitPosition = new THREE.Vector3();
+    this.orbitRadius = 0;
+    this.orbitAngle = 0;
+    this.orbitElevation = 0;
+    this.lastOrbitPointerY = null;
+    this.orbiting = false;
     this.displacement = new THREE.Vector3();
     this.nextDisplacement = new THREE.Vector3();
-    this.strafeDelta = new THREE.Vector2();
-    this.strafePointer = new THREE.Vector2();
-    this.strafing = false;
+    this.rmbPointerStart = new THREE.Vector2();
+    this.rmbPointer = new THREE.Vector2();
+    this.hasRmbPointerStart = false;
+    this.rmbThrustVelocity = 0;
+    this.rmbStrafeVelocity = 0;
+    this.rmbForward = new THREE.Vector3();
+    this.rmbRight = new THREE.Vector3();
+    this.rmbMovement = new THREE.Vector3();
   }
 
-  updateStrafePointer(pointer, active) {
-    this.strafeDelta.set(0, 0);
+  updateRmbPointer(pointer, active) {
     if (!active || !pointer.hasPosition) {
-      this.strafing = false;
+      this.hasRmbPointerStart = false;
       return;
     }
-    if (this.strafing) {
-      this.strafeDelta.set(
-        THREE.MathUtils.clamp(pointer.x - this.strafePointer.x, -this.strafeMaxPixelsPerFrame, this.strafeMaxPixelsPerFrame),
-        THREE.MathUtils.clamp(pointer.y - this.strafePointer.y, -this.strafeMaxPixelsPerFrame, this.strafeMaxPixelsPerFrame),
-      );
+    if (!this.hasRmbPointerStart) {
+      this.rmbPointerStart.set(pointer.x, pointer.y);
+      this.hasRmbPointerStart = true;
     }
-    this.strafePointer.set(pointer.x, pointer.y);
-    this.strafing = true;
+    this.rmbPointer.set(pointer.x, pointer.y);
   }
 
-  updateAim(pointer, canvas) {
-    if (!pointer.hasPosition) return;
-    const bounds = canvas.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    this.aim.set(
-      ((pointer.x - bounds.left) / bounds.width) * 2 - 1,
-      -((pointer.y - bounds.top) / bounds.height) * 2 + 1,
-    );
-    this.hasAim = true;
-  }
-
-  update(delta, rayDirection, thrusting, braking, cameraRight, cameraUp) {
-    if (this.hasAim && !this.strafing) {
-      this.desiredDirection.copy(rayDirection).normalize();
-      if (this.steeredDirection.lengthSq() === 0) {
-        this.steeredDirection.copy(this.desiredDirection);
-      } else {
-        const speedRatio = Math.min(1, this.velocity.length() / this.maxForwardSpeed);
-        const response = THREE.MathUtils.lerp(
-          this.lowSpeedSteering,
-          this.highSpeedSteering,
-          speedRatio,
-        );
-        this.steeredDirection.lerp(
-          this.desiredDirection,
-          1 - Math.exp(-response * delta),
-        ).normalize();
-      }
-    }
-
-    const speed = this.velocity.length();
-    if (!thrusting && !braking) {
-      this.velocity.set(0, 0, 0);
-      this.lateralVelocity.set(0, 0, 0);
-    } else if (braking && thrusting) {
-      this.velocity.multiplyScalar(
-        speed > 0 ? Math.max(0, speed - this.strafeBraking * delta) / speed : 0,
+  update(
+    delta,
+    horizontalMovement,
+    verticalPointerY,
+    lmbOrbiting,
+    rmbTraveling,
+    chorded,
+    currentPosition,
+    basePosition,
+    cameraForward,
+    cameraRight,
+  ) {
+    this.nextDisplacement.copy(this.displacement);
+    if (lmbOrbiting) {
+      this.updateOrbit(
+        horizontalMovement,
+        verticalPointerY,
+        currentPosition,
       );
-    } else if (braking && this.hasAim) {
-      let alongAim = this.velocity.dot(this.steeredDirection);
-      if (alongAim > 0) {
-        const stoppingTime = Math.min(delta, alongAim / this.braking);
-        alongAim -= this.braking * stoppingTime;
-        alongAim -= this.reverseAcceleration * (delta - stoppingTime);
-      } else {
-        alongAim -= this.reverseAcceleration * delta;
-      }
-      alongAim = Math.max(-this.maxReverseSpeed, alongAim);
-
-      this.lateralVelocity.copy(this.velocity)
-        .addScaledVector(this.steeredDirection, -this.velocity.dot(this.steeredDirection))
-        .multiplyScalar(Math.exp(-this.braking * delta));
-      this.velocity.copy(this.steeredDirection).multiplyScalar(alongAim)
-        .add(this.lateralVelocity);
-    } else if (thrusting && this.hasAim) {
-      this.velocity.addScaledVector(this.steeredDirection, this.forwardAcceleration * delta);
-      this.velocity.clampLength(0, this.maxForwardSpeed);
-    }
-
-    this.nextDisplacement.copy(this.displacement).addScaledVector(this.velocity, delta);
-    if (this.strafing) {
       this.nextDisplacement
-        .addScaledVector(cameraRight, -this.strafeDelta.x * this.strafeSensitivity)
-        .addScaledVector(cameraUp, this.strafeDelta.y * this.strafeSensitivity);
+        .copy(this.orbitPosition)
+        .sub(basePosition);
+    } else {
+      if (this.orbiting) {
+        this.nextDisplacement
+          .copy(currentPosition)
+          .sub(basePosition);
+      }
+      this.orbiting = false;
+      this.lastOrbitPointerY = null;
     }
+    this.updateRmbMovement(
+      delta,
+      cameraForward,
+      cameraRight,
+      rmbTraveling,
+      lmbOrbiting || chorded,
+    );
+    this.nextDisplacement.add(this.rmbMovement);
     if (this.nextDisplacement.length() > this.travelLimit) {
       this.nextDisplacement.setLength(this.travelLimit);
-      const outwardSpeed = this.velocity.dot(this.nextDisplacement) / this.travelLimit;
-      if (outwardSpeed > 0) {
-        this.velocity.addScaledVector(this.nextDisplacement, -outwardSpeed / this.travelLimit);
-      }
     }
     this.displacement.copy(this.nextDisplacement);
   }
 
+  updateOrbit(horizontalMovement, verticalPointerY, currentPosition) {
+    if (!this.orbiting) {
+      const x = currentPosition.x - this.orbitCenter.x;
+      const y = currentPosition.y - this.orbitCenter.y;
+      const z = currentPosition.z - this.orbitCenter.z;
+      this.orbitRadius = Math.hypot(x, y, z);
+      this.orbitAngle = Math.atan2(x, z);
+      this.orbitElevation = this.orbitRadius > 0
+        ? Math.asin(THREE.MathUtils.clamp(y / this.orbitRadius, -1, 1))
+        : 0;
+      this.lastOrbitPointerY = verticalPointerY;
+      this.orbiting = true;
+    }
+
+    const verticalMovement = this.lastOrbitPointerY === null
+      ? 0
+      : verticalPointerY - this.lastOrbitPointerY;
+    this.lastOrbitPointerY = verticalPointerY;
+    this.orbitAngle += horizontalMovement * this.orbitAngularSensitivity;
+    const requestedElevation = this.orbitElevation
+      - verticalMovement * this.orbitElevationSensitivity;
+    if (this.orbitElevation > this.orbitElevationLimit) {
+      this.orbitElevation = Math.min(
+        this.orbitElevation,
+        Math.max(requestedElevation, this.orbitElevationLimit),
+      );
+    } else if (this.orbitElevation < -this.orbitElevationLimit) {
+      this.orbitElevation = Math.max(
+        this.orbitElevation,
+        Math.min(requestedElevation, -this.orbitElevationLimit),
+      );
+    } else {
+      this.orbitElevation = THREE.MathUtils.clamp(
+        requestedElevation,
+        -this.orbitElevationLimit,
+        this.orbitElevationLimit,
+      );
+    }
+    const horizontalRadius = Math.cos(this.orbitElevation) * this.orbitRadius;
+    this.orbitPosition.set(
+      this.orbitCenter.x + Math.sin(this.orbitAngle) * horizontalRadius,
+      this.orbitCenter.y + Math.sin(this.orbitElevation) * this.orbitRadius,
+      this.orbitCenter.z + Math.cos(this.orbitAngle) * horizontalRadius,
+    );
+  }
+
+  updateRmbMovement(delta, cameraForward, cameraRight, active, suspended) {
+    this.rmbMovement.set(0, 0, 0);
+
+    if (suspended) {
+      this.rmbThrustVelocity = 0;
+      this.rmbStrafeVelocity = 0;
+      return;
+    }
+
+    if (active && this.hasRmbPointerStart) {
+      const thrustDisplacement = this.rmbPointerStart.y - this.rmbPointer.y;
+      const signedThrust = Math.abs(thrustDisplacement) <= this.rmbDeadZone
+        ? 0
+        : thrustDisplacement - Math.sign(thrustDisplacement) * this.rmbDeadZone;
+      const strafeDisplacement = this.rmbPointer.x - this.rmbPointerStart.x;
+      const signedStrafe = Math.abs(strafeDisplacement) <= this.rmbDeadZone
+        ? 0
+        : strafeDisplacement - Math.sign(strafeDisplacement) * this.rmbDeadZone;
+      const targetThrustVelocity = THREE.MathUtils.clamp(
+        signedThrust * this.rmbThrustSensitivity,
+        -this.rmbMaxSpeed,
+        this.rmbMaxSpeed,
+      );
+      const targetStrafeVelocity = THREE.MathUtils.clamp(
+        signedStrafe * this.rmbStrafeSensitivity,
+        -this.rmbMaxSpeed,
+        this.rmbMaxSpeed,
+      );
+      const accelerationBlend = 1 - Math.exp(-this.rmbAcceleration * delta);
+      this.rmbThrustVelocity += (
+        targetThrustVelocity - this.rmbThrustVelocity
+      ) * accelerationBlend;
+      this.rmbStrafeVelocity += (
+        targetStrafeVelocity - this.rmbStrafeVelocity
+      ) * accelerationBlend;
+    } else {
+      this.rmbThrustVelocity *= Math.exp(-this.rmbBraking * delta);
+      this.rmbStrafeVelocity *= Math.exp(-this.rmbBraking * delta);
+      if (Math.abs(this.rmbThrustVelocity) <= this.rmbStopEpsilon) {
+        this.rmbThrustVelocity = 0;
+      }
+      if (Math.abs(this.rmbStrafeVelocity) <= this.rmbStopEpsilon) {
+        this.rmbStrafeVelocity = 0;
+      }
+    }
+
+    this.rmbForward.copy(cameraForward);
+    this.rmbRight.copy(cameraRight);
+    if (this.rmbForward.lengthSq() > 0.000001) {
+      this.rmbMovement.addScaledVector(
+        this.rmbForward.normalize(),
+        this.rmbThrustVelocity,
+      );
+    }
+    if (this.rmbRight.lengthSq() > 0.000001) {
+      this.rmbMovement.addScaledVector(
+        this.rmbRight.normalize(),
+        this.rmbStrafeVelocity,
+      );
+    }
+    this.rmbMovement.multiplyScalar(delta);
+  }
+
   reset() {
-    this.hasAim = false;
-    this.aim.set(0, 0);
-    this.desiredDirection.set(0, 0, 0);
-    this.steeredDirection.set(0, 0, 0);
-    this.velocity.set(0, 0, 0);
-    this.lateralVelocity.set(0, 0, 0);
+    this.orbitPosition.set(0, 0, 0);
+    this.orbitRadius = 0;
+    this.orbitAngle = 0;
+    this.orbitElevation = 0;
+    this.lastOrbitPointerY = null;
+    this.orbiting = false;
     this.displacement.set(0, 0, 0);
     this.nextDisplacement.set(0, 0, 0);
-    this.strafeDelta.set(0, 0);
-    this.strafePointer.set(0, 0);
-    this.strafing = false;
+    this.rmbPointerStart.set(0, 0);
+    this.rmbPointer.set(0, 0);
+    this.hasRmbPointerStart = false;
+    this.rmbThrustVelocity = 0;
+    this.rmbStrafeVelocity = 0;
+    this.rmbForward.set(0, 0, 0);
+    this.rmbRight.set(0, 0, 0);
+    this.rmbMovement.set(0, 0, 0);
   }
 }
