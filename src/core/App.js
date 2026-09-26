@@ -595,7 +595,6 @@ export class App {
 
     if (
       event.button !== 0 ||
-      this.themeManager.activeThemeName !== "galaxy" ||
       !this.journeyDirector.gatewayReady ||
       journeyGateway !== this.armedGateway ||
       journeyGateway?.acceptanceMode !== "proximity-lmb" ||

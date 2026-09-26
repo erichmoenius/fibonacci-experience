@@ -8,6 +8,8 @@ import { NarrativeSpiral } from "../systems/NarrativeSpiral.js";
 
 import EngineSystem from "../systems/EngineSystem.js";
 
+import { SpaceFlight } from "../systems/SpaceFlight.js";
+
 import { EngineJourney } from "../systems/cinematic/EngineJourney.js";
 
 import CameraDirector from "../systems/cinematic/CameraDirector.js";
@@ -120,6 +122,8 @@ export class SpaceTheme {
 
     this.group.add(this.engine.object);
 
+    this.flight = new SpaceFlight(this.engine.object);
+
     this.wormholeAttached = false;
 
     this.gateways = [];
@@ -129,6 +133,8 @@ export class SpaceTheme {
       1.5,
       this.engine.core.object,
     );
+
+    gateway.acceptanceMode = "proximity-lmb";
 
     gateway.crossing = {
       target: this.engine.core.object,
