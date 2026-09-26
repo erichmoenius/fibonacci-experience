@@ -131,18 +131,20 @@ export default class JourneyDirector {
     for (const gateway of this.gateways) {
       if (!gateway.enabled) continue;
 
+      const gatewayPosition = gateway.resolvePosition();
+
       console.log(
         "Gateway position:",
-        gateway.position,
+        gatewayPosition,
         "radius:",
         gateway.radius,
       );
 
-      const distance = gateway.position.distanceTo(position);
+      const distance = gatewayPosition.distanceTo(position);
 
       console.log("🧪 GATEWAY DISTANCE:", distance.toFixed(2));
 
-      if (gateway.contains(position)) {
+      if (distance <= gateway.radius) {
         return gateway;
       }
     }

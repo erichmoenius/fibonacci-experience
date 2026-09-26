@@ -471,6 +471,17 @@ export class App {
   setupInput() {
     const canvas = this.renderer.renderer.domElement;
 
+    window.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!this.acceptReadyProximityGateway(event)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      true,
+    );
+
     canvas.addEventListener(
       "pointerdown",
 
@@ -579,6 +590,29 @@ export class App {
     this.acceptanceClick.moved = false;
   }
 
+  acceptReadyProximityGateway(event) {
+    const journeyGateway = this.activeGateway;
+
+    if (
+      event.button !== 0 ||
+      this.themeManager.activeThemeName !== "galaxy" ||
+      !this.journeyDirector.gatewayReady ||
+      journeyGateway !== this.armedGateway ||
+      journeyGateway?.acceptanceMode !== "proximity-lmb" ||
+      !journeyGateway.journey ||
+      this.journeyDirector.isActive()
+    )
+      return false;
+
+    console.log("JOURNEY_ACCEPTED: gateway proximity");
+
+    this.isBoosting = false;
+    this.resetAcceptanceClick();
+    this.beginGatewayJourney(journeyGateway);
+
+    return true;
+  }
+
   trackAcceptanceMovement(event) {
     if (event.pointerId !== this.acceptanceClick.pointerId) return;
 
@@ -598,6 +632,9 @@ export class App {
     const threshold = this.cameraDirector.freeFlight.dragThreshold;
     const theme = this.themeManager.activeTheme;
     const innerCore = theme?.engine?.core?.innerCore;
+    const journeyGateway = this.armedGateway;
+    const acceptsProximityClick =
+      journeyGateway?.acceptanceMode === "proximity-lmb";
     const canvas = this.renderer.renderer.domElement;
     const bounds = canvas.getBoundingClientRect();
 
@@ -606,9 +643,8 @@ export class App {
         event.pointerId !== click.pointerId ||
         click.moved ||
         event.buttons !== 0 ||
-        !this.armedGateway?.journey ||
+        !journeyGateway?.journey ||
         this.journeyDirector.isActive() ||
-        !innerCore?.visible ||
         !bounds.width ||
         !bounds.height
       )
@@ -621,38 +657,47 @@ export class App {
 
       if (movementDistance > threshold) return;
 
-      this.acceptancePointer.set(
-        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
-        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
-      );
+      if (acceptsProximityClick) {
+        return;
+      } else {
+        if (!innerCore?.visible) return;
 
-      this.acceptanceRaycaster.setFromCamera(
-        this.acceptancePointer,
-        this.camera,
-      );
+        this.acceptancePointer.set(
+          ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+          -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+        );
 
-      const hits = this.acceptanceRaycaster.intersectObject(innerCore, false);
+        this.acceptanceRaycaster.setFromCamera(
+          this.acceptancePointer,
+          this.camera,
+        );
 
-      if (!hits.length) return;
+        const hits = this.acceptanceRaycaster.intersectObject(innerCore, false);
 
-      console.log("JOURNEY_ACCEPTED: engine core");
+        if (!hits.length) return;
 
-      const journeyGateway = this.armedGateway;
-      const journey = journeyGateway.journey;
+        console.log("JOURNEY_ACCEPTED: engine core");
+      }
 
-      this.disarmArmedInvitation();
-
-      this.cameraDirector.beginJourney(journey);
-
-      this.journeyDirector.begin(
-        journey,
-        journeyGateway.target,
-        journeyGateway.crossing,
-        journeyGateway.destinationTheme,
-      );
+      this.beginGatewayJourney(journeyGateway);
     } finally {
       this.resetAcceptanceClick();
     }
+  }
+
+  beginGatewayJourney(journeyGateway) {
+    const journey = journeyGateway.journey;
+
+    this.disarmArmedInvitation();
+
+    this.cameraDirector.beginJourney(journey);
+
+    this.journeyDirector.begin(
+      journey,
+      journeyGateway.target,
+      journeyGateway.crossing,
+      journeyGateway.destinationTheme,
+    );
   }
 
   resetAcceptanceClick() {

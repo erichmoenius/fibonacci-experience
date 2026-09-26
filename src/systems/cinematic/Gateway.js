@@ -34,10 +34,16 @@ export default class Gateway {
     this.enabled = true;
 
     this.journey = null;
+
+    this.acceptanceMode = "target-hit";
+  }
+
+  resolvePosition() {
+    this.target?.getWorldPosition(this.position);
+    return this.position;
   }
 
   contains(position) {
-    this.target?.getWorldPosition(this.position);
-    return this.position.distanceTo(position) <= this.radius;
+    return this.resolvePosition().distanceTo(position) <= this.radius;
   }
 }

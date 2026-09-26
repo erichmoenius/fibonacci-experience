@@ -3,6 +3,8 @@ import { BaseTheme } from "./BaseTheme.js";
 import { GalaxySystem } from "../systems/GalaxySystem.js";
 import { GalaxyFlight } from "../systems/GalaxyFlight.js";
 import { GalaxyCosmos } from "../systems/GalaxyCosmos.js";
+import Gateway from "../systems/cinematic/Gateway.js";
+import { GalaxyJourney } from "../systems/cinematic/GalaxyJourney.js";
 
 export class GalaxyTheme extends BaseTheme {
   constructor(container, gui) {
@@ -10,6 +12,25 @@ export class GalaxyTheme extends BaseTheme {
     this.galaxy = new GalaxySystem(container);
     this.cosmos = new GalaxyCosmos(container, this.getHomePose());
     this.flight = new GalaxyFlight(this.galaxy.group);
+    this.gateways = [];
+
+    const gateway = new Gateway(
+      new THREE.Vector3(),
+      2.5,
+      this.galaxy.specialStar,
+    );
+    gateway.acceptanceMode = "proximity-lmb";
+    gateway.crossing = {
+      target: this.galaxy.specialStar,
+      direction: new THREE.Vector3(0, 0, 1),
+      endpointDistance: 0.75,
+      orientation: "forward",
+      transitDistance: 2.5,
+    };
+    gateway.destinationTheme = "planetary";
+    gateway.journey = new GalaxyJourney();
+    this.gateways.push(gateway);
+
     this.lastUpdateTime = null;
     // The app's separate blue spiral sits at the world origin, below this galaxy.
     this.backgroundParticleField = container.parent?.children.find(
@@ -42,7 +63,7 @@ export class GalaxyTheme extends BaseTheme {
   }
 
   getGateways() {
-    return [];
+    return this.gateways;
   }
 
   destroy() {
