@@ -111,9 +111,9 @@ export class GalaxyFlight {
       ? 0
       : verticalPointerY - this.lastOrbitPointerY;
     this.lastOrbitPointerY = verticalPointerY;
-    this.orbitAngle += horizontalMovement * this.orbitAngularSensitivity;
+    this.orbitAngle -= horizontalMovement * this.orbitAngularSensitivity;
     const requestedElevation = this.orbitElevation
-      - verticalMovement * this.orbitElevationSensitivity;
+      + verticalMovement * this.orbitElevationSensitivity;
     if (this.orbitElevation > this.orbitElevationLimit) {
       this.orbitElevation = Math.min(
         this.orbitElevation,
@@ -153,7 +153,7 @@ export class GalaxyFlight {
       const signedThrust = Math.abs(thrustDisplacement) <= this.rmbDeadZone
         ? 0
         : thrustDisplacement - Math.sign(thrustDisplacement) * this.rmbDeadZone;
-      const strafeDisplacement = this.rmbPointer.x - this.rmbPointerStart.x;
+      const strafeDisplacement = this.rmbPointerStart.x - this.rmbPointer.x;
       const signedStrafe = Math.abs(strafeDisplacement) <= this.rmbDeadZone
         ? 0
         : strafeDisplacement - Math.sign(strafeDisplacement) * this.rmbDeadZone;
