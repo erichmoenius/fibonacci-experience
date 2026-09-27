@@ -244,37 +244,82 @@ export default class EngineCore {
       radius += lane * 0.015;
 
       // ------------------------------------------------
-      // COLOR
+      // MATERIAL
       // ------------------------------------------------
 
-      let color;
+      const materialRoll = Math.random();
 
-      // if (family < 0.25) {
-      //   color = 0xfff3d1;
-      // } else if (family < 0.8) {
-      //   color = 0xe6bf67;
-      // } else {
-      //   color = 0x8d6b3f;
-      // }
+      let palette;
 
-      if (family < 0.25) {
-        // Pale Silver
-        color = 0xe8edf5;
-      } else if (family < 0.8) {
-        // Titanium Gray
-        color = 0x8f949d;
+      let brightness;
+
+      let roughness;
+
+      let metalness;
+
+      if (materialRoll < 0.35) {
+        // Dark titanium / charcoal
+
+        palette = [0x111419, 0x1a1d22, 0x24282e, 0x30343a];
+        brightness = THREE.MathUtils.randFloat(0.72, 1.0);
+        roughness = THREE.MathUtils.randFloat(0.62, 0.88);
+        metalness = THREE.MathUtils.randFloat(0.18, 0.42);
+      } else if (materialRoll < 0.6) {
+        // Cool steel / blue-gray metal
+
+        palette = [0x1b252f, 0x27333d, 0x36434d, 0x46525b];
+        brightness = THREE.MathUtils.randFloat(0.68, 0.96);
+        roughness = THREE.MathUtils.randFloat(0.38, 0.68);
+        metalness = THREE.MathUtils.randFloat(0.48, 0.78);
+      } else if (materialRoll < 0.8) {
+        // Mineral / stone
+
+        palette =
+          Math.random() < 0.16
+            ? [0x737579, 0x858580]
+            : [0x303237, 0x3b3f44, 0x4b5054];
+        brightness = THREE.MathUtils.randFloat(0.7, 0.98);
+        roughness = THREE.MathUtils.randFloat(0.78, 0.98);
+        metalness = THREE.MathUtils.randFloat(0.02, 0.14);
+      } else if (materialRoll < 0.95) {
+        // Warm iron / oxidized matter
+
+        palette = [0x302521, 0x3b2b25, 0x493129, 0x41352d];
+        brightness = THREE.MathUtils.randFloat(0.7, 0.96);
+        roughness = THREE.MathUtils.randFloat(0.64, 0.9);
+        metalness = THREE.MathUtils.randFloat(0.1, 0.38);
       } else {
-        // Dark Iron
-        color = 0x50545c;
+        // Rare pale, warm metallic, or reflective catch
+
+        const accentRoll = Math.random();
+
+        if (accentRoll < 0.45) {
+          palette = [0x8b8a84, 0xa09b8e];
+          brightness = THREE.MathUtils.randFloat(0.72, 0.94);
+          roughness = THREE.MathUtils.randFloat(0.72, 0.94);
+          metalness = THREE.MathUtils.randFloat(0.02, 0.12);
+        } else if (accentRoll < 0.85) {
+          palette = [0x5f4c2d, 0x715932];
+          brightness = THREE.MathUtils.randFloat(0.68, 0.88);
+          roughness = THREE.MathUtils.randFloat(0.42, 0.68);
+          metalness = THREE.MathUtils.randFloat(0.46, 0.7);
+        } else {
+          palette = [0x080a0d, 0x10141a];
+          brightness = THREE.MathUtils.randFloat(0.78, 1.0);
+          roughness = THREE.MathUtils.randFloat(0.2, 0.42);
+          metalness = THREE.MathUtils.randFloat(0.72, 0.92);
+        }
       }
 
-      const brightness = 0.45 + Math.random() * 0.45;
+      const color = new THREE.Color(
+        palette[Math.floor(Math.random() * palette.length)],
+      ).multiplyScalar(brightness);
 
       const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(color).multiplyScalar(brightness),
+        color,
 
-        roughness: 0.92,
-        metalness: 0.12,
+        roughness,
+        metalness,
 
         transparent: true,
         opacity: 1.0,
