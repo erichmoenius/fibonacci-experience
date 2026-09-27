@@ -139,6 +139,8 @@ export default class EngineCore {
 
     this.orbitParticles = [];
 
+    const captureSectorCenters = [0.25, 1.35, 3.15, 5.05];
+
     for (let i = 0; i < 120; i++) {
       const size =
         Math.random() < 0.75
@@ -179,7 +181,24 @@ export default class EngineCore {
 
       const cluster = Math.random() < 0.35;
 
+      const concentrated = Math.random() < 0.68;
+
+      const sectorCenter = concentrated
+        ? captureSectorCenters[
+            Math.floor(Math.random() * captureSectorCenters.length)
+          ]
+        : 0;
+
+      const sectorSpread = 0.35 + Math.random() * 0.3;
+
+      const angle = concentrated
+        ? sectorCenter +
+          (Math.random() + Math.random() - 1) * sectorSpread
+        : Math.random() * Math.PI * 2;
+
       let radius;
+
+      let inclination;
 
       // ------------------------------------------------
       // RADIUS
@@ -189,15 +208,31 @@ export default class EngineCore {
         // Inner dust
 
         radius = 0.18 + Math.random() * 0.1;
+
+        inclination = THREE.MathUtils.degToRad(
+          THREE.MathUtils.randFloat(-3, 3),
+        );
       } else if (family < 0.8) {
         // Main accretion disk
 
         radius =
           (cluster ? 0.36 : 0.32) + Math.random() * (cluster ? 0.08 : 0.18);
+
+        const inclinationTendencies = [-9, 0, 7];
+
+        inclination = THREE.MathUtils.degToRad(
+          inclinationTendencies[
+            Math.floor(Math.random() * inclinationTendencies.length)
+          ] + THREE.MathUtils.randFloat(-2.5, 2.5),
+        );
       } else {
         // Outer drifting dust
 
         radius = 0.6 + Math.random() * 0.35;
+
+        inclination = THREE.MathUtils.degToRad(
+          THREE.MathUtils.randFloat(-14, 14),
+        );
       }
 
       // ------------------------------------------------
@@ -263,25 +298,71 @@ export default class EngineCore {
         Math.random() * Math.PI,
       );
 
+      const silhouette = Math.random();
+
+      if (silhouette < 0.28) {
+        // Stretched shard
+
+        particle.scale.set(
+          THREE.MathUtils.randFloat(1.6, 2.25),
+          THREE.MathUtils.randFloat(0.38, 0.68),
+          THREE.MathUtils.randFloat(0.42, 0.78),
+        );
+      } else if (silhouette < 0.55) {
+        // Flattened chip
+
+        particle.scale.set(
+          THREE.MathUtils.randFloat(0.9, 1.45),
+          THREE.MathUtils.randFloat(0.28, 0.5),
+          THREE.MathUtils.randFloat(0.8, 1.35),
+        );
+      } else if (silhouette < 0.8) {
+        // Squat irregular chunk
+
+        particle.scale.set(
+          THREE.MathUtils.randFloat(0.7, 1.25),
+          THREE.MathUtils.randFloat(0.58, 0.9),
+          THREE.MathUtils.randFloat(0.68, 1.2),
+        );
+      } else {
+        // Narrow fragment
+
+        particle.scale.set(
+          THREE.MathUtils.randFloat(0.35, 0.62),
+          THREE.MathUtils.randFloat(0.55, 0.95),
+          THREE.MathUtils.randFloat(1.35, 2.0),
+        );
+      }
+
       particle.userData = {
-        angle: Math.random() * Math.PI * 2,
+        angle,
 
-        radius: 0.32 + Math.random() * 0.35,
+        radius,
 
-        speed:
-          THREE.MathUtils.lerp(
-            1.8,
-            0.15,
-            THREE.MathUtils.clamp((radius - 0.18) / 0.75, 0, 1),
-          ) +
-          Math.random() * 0.08,
+        speed: THREE.MathUtils.randFloat(0.88, 1.12),
 
         height:
           family < 0.25
-            ? (Math.random() - 0.5) * 0.015
+            ? (Math.random() - 0.5) * 0.012
             : family < 0.8
-              ? (Math.random() - 0.5) * 0.05
-              : (Math.random() - 0.5) * 0.18,
+              ? (Math.random() - 0.5) * 0.028
+              : (Math.random() - 0.5) * 0.06,
+
+        inclination,
+
+        ascendingNode: Math.random() * Math.PI * 2,
+
+        concentrated,
+
+        sectorCenter,
+
+        sectorSpread,
+
+        tumble: new THREE.Vector3(
+          THREE.MathUtils.randFloatSpread(0.2),
+          THREE.MathUtils.randFloatSpread(0.16),
+          THREE.MathUtils.randFloatSpread(0.14),
+        ),
 
         drift: Math.random() * Math.PI * 2,
 
@@ -562,7 +643,11 @@ export default class EngineCore {
 
             if (particle.userData.respawnTimer <= 0) {
               particle.userData.radius = THREE.MathUtils.randFloat(0.85, 0.95);
-              particle.userData.angle = Math.random() * Math.PI * 2;
+              particle.userData.angle = particle.userData.concentrated
+                ? particle.userData.sectorCenter +
+                  (Math.random() + Math.random() - 1) *
+                    particle.userData.sectorSpread
+                : Math.random() * Math.PI * 2;
               particle.userData.consume = Math.random() < 0.08;
 
               particle.visible = true;
@@ -580,18 +665,18 @@ export default class EngineCore {
           );
 
           const orbitalSpeed = THREE.MathUtils.lerp(
-            1.35, // Inner disk
+            1.65, // Inner disk
 
-            0.35, // Outer disk
+            0.32, // Outer disk
 
-            radiusFactor,
-          );
+            THREE.MathUtils.clamp(radiusFactor, 0, 1),
+          ) * particle.userData.speed;
 
-          particle.userData.angle +=
-            delta * particle.userData.speed * orbitalSpeed;
+          particle.userData.angle += delta * orbitalSpeed;
 
-          particle.rotation.x += delta * 0.1;
-          particle.rotation.y += delta * 0.06;
+          particle.rotation.x += delta * particle.userData.tumble.x;
+          particle.rotation.y += delta * particle.userData.tumble.y;
+          particle.rotation.z += delta * particle.userData.tumble.z;
 
           if (particle.userData.consume) {
             const gravity = THREE.MathUtils.inverseLerp(
@@ -625,18 +710,35 @@ export default class EngineCore {
           const wobble =
             Math.sin(this.time * 0.35 + particle.userData.drift * 2.0) * 0.012;
 
+          const orbitAngle = particle.userData.angle + wobble;
+
+          const cosNode = Math.cos(particle.userData.ascendingNode);
+          const sinNode = Math.sin(particle.userData.ascendingNode);
+          const cosInclination = Math.cos(particle.userData.inclination);
+          const sinInclination = Math.sin(particle.userData.inclination);
+
+          const orbitPhase = orbitAngle - particle.userData.ascendingNode;
+
+          const cosAngle = Math.cos(orbitPhase);
+          const sinAngle = Math.sin(orbitPhase);
+
+          const verticalDrift =
+            Math.sin(
+              this.time * particle.userData.driftSpeed + particle.userData.drift,
+            ) *
+            particle.userData.driftAmount *
+            0.25;
+
           particle.position.set(
-            Math.cos(particle.userData.angle + wobble) * animatedRadius,
+            (cosNode * cosAngle - sinNode * sinAngle * cosInclination) *
+              animatedRadius,
 
             particle.userData.height +
-              Math.sin(
-                this.time * particle.userData.driftSpeed +
-                  particle.userData.drift,
-              ) *
-                particle.userData.driftAmount *
-                0.35,
+              sinAngle * sinInclination * animatedRadius +
+              verticalDrift,
 
-            Math.sin(particle.userData.angle + wobble) * animatedRadius,
+            (sinNode * cosAngle + cosNode * sinAngle * cosInclination) *
+              animatedRadius,
           );
 
           const fade = THREE.MathUtils.smoothstep(
