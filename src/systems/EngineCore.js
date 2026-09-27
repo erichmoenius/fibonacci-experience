@@ -563,6 +563,11 @@ export default class EngineCore {
 
   setInvitation(active) {
     this.invitationActive = active;
+    this.plasmaTrail.setInvitation(active);
+  }
+
+  acceptInvitation() {
+    this.plasmaTrail.acceptInvitation();
   }
 
   setPresenceIntensity(value) {

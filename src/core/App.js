@@ -686,6 +686,14 @@ export class App {
 
   beginGatewayJourney(journeyGateway) {
     const journey = journeyGateway.journey;
+    const theme = this.themeManager.activeTheme;
+
+    if (
+      journey.id === "engine" &&
+      journeyGateway.target === theme?.engine?.core?.object
+    ) {
+      theme.engine.acceptInvitation();
+    }
 
     this.disarmArmedInvitation();
 
