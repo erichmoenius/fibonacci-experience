@@ -1,5 +1,19 @@
 import * as THREE from "three";
 import { loadMovieTexture } from "../movieLoader.js";
+import { SphericalTravellerFlight } from "../systems/SphericalTravellerFlight.js";
+
+const MOVIES_FLIGHT = {
+  travelLimit: 16,
+  maxSpeed: 2,
+  orbitAngularSensitivity: 0.001,
+  orbitElevationSensitivity: 0.001,
+  travelAcceleration: 5,
+  travelBraking: 11,
+  thrustSensitivity: 0.03,
+  strafeSensitivity: 0.03,
+  deadZone: 3,
+  stopEpsilon: 0.01,
+};
 
 // ------------------------------------------------
 // 🎬 CINEMATIC HELPER
@@ -18,6 +32,11 @@ export class MoviesTheme {
     this.gui = gui;
 
     this.time = 0;
+
+    this.flight = new SphericalTravellerFlight({
+      orbitCenter: this.container.getWorldPosition(new THREE.Vector3()),
+      ...MOVIES_FLIGHT,
+    });
 
     // ------------------------------------------------
     // ⚙️ SETTINGS

@@ -1,18 +1,31 @@
 import * as THREE from "three";
 
 export class SphericalTravellerFlight {
-  constructor({ orbitCenter, travelLimit, maxSpeed }) {
+  constructor({
+    orbitCenter,
+    travelLimit,
+    maxSpeed,
+    orbitAngularSensitivity = 0.002,
+    orbitElevationSensitivity = 0.002,
+    orbitElevationLimit = Math.PI / 2 - 0.01,
+    travelAcceleration = 7,
+    travelBraking = 11,
+    thrustSensitivity = 0.08,
+    strafeSensitivity = 0.08,
+    deadZone = 3,
+    stopEpsilon = 0.01,
+  }) {
     this.travelLimit = travelLimit;
-    this.orbitAngularSensitivity = 0.002;
-    this.orbitElevationSensitivity = 0.002;
-    this.orbitElevationLimit = Math.PI / 2 - 0.01;
-    this.rmbAcceleration = 7;
+    this.orbitAngularSensitivity = orbitAngularSensitivity;
+    this.orbitElevationSensitivity = orbitElevationSensitivity;
+    this.orbitElevationLimit = orbitElevationLimit;
+    this.rmbAcceleration = travelAcceleration;
     this.rmbMaxSpeed = maxSpeed;
-    this.rmbBraking = 11;
-    this.rmbThrustSensitivity = 0.08;
-    this.rmbStrafeSensitivity = 0.08;
-    this.rmbDeadZone = 3;
-    this.rmbStopEpsilon = 0.01;
+    this.rmbBraking = travelBraking;
+    this.rmbThrustSensitivity = thrustSensitivity;
+    this.rmbStrafeSensitivity = strafeSensitivity;
+    this.rmbDeadZone = deadZone;
+    this.rmbStopEpsilon = stopEpsilon;
 
     this.orbitCenter = orbitCenter;
     this.orbitPosition = new THREE.Vector3();
