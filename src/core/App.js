@@ -78,14 +78,38 @@ export class App {
     this.journeyDirector = new JourneyDirector(this.cameraDirector);
 
     this.journeyDirector.onApproach = (coreObject) => {
+      if (this.journeyDirector.getJourney()?.id === "engine") {
+        this.cameraDirector.beginCoreApproach(coreObject, {
+          radius: 6.2,
+          orbitAngle: 0.12,
+        });
+        return;
+      }
+
       this.cameraDirector.beginCoreApproach(coreObject);
     };
 
     this.journeyDirector.onHorizon = (coreObject) => {
+      if (this.journeyDirector.getJourney()?.id === "engine") {
+        this.cameraDirector.beginCoreHorizon(coreObject, {
+          radius: 1.4,
+          orbitAngle: 0.55,
+        });
+        return;
+      }
+
       this.cameraDirector.beginCoreHorizon(coreObject);
     };
 
     this.journeyDirector.onSingularity = (crossing) => {
+      if (this.journeyDirector.getJourney()?.id === "engine") {
+        this.cameraDirector.beginCrossing(crossing, {
+          orbitAngle: 0.9,
+          easingPower: 4,
+        });
+        return;
+      }
+
       this.cameraDirector.beginCrossing(crossing);
     };
 
@@ -100,7 +124,13 @@ export class App {
     this.journeyDirector.onTransit = (type) => {
       console.log("🌌 Transit requested:", type);
 
-      this.transitSystem.start(type);
+      const forward = this.camera.getWorldDirection(new THREE.Vector3());
+
+      this.transitSystem.start(type, {
+        position: this.cameraDirector.getPosition(),
+        forward,
+      });
+      this.cameraDirector.beginWormholeTravel(4, 18);
     };
 
     // ------------------------------------------------
@@ -139,6 +169,7 @@ export class App {
     this.journeyDirector.onVoidStart = () => {
       console.log("🌑 VOID");
 
+      this.transitSystem.close(1);
       this.renderer.fadeOut(1);
     };
 
@@ -687,6 +718,8 @@ export class App {
   beginGatewayJourney(journeyGateway) {
     const journey = journeyGateway.journey;
     const theme = this.themeManager.activeTheme;
+    const journeyComposition =
+      journey.id === "engine" ? theme?.getJourneyComposition?.() : null;
 
     if (
       journey.id === "engine" &&
@@ -698,6 +731,14 @@ export class App {
     this.disarmArmedInvitation();
 
     this.cameraDirector.beginJourney(journey);
+
+    if (journey.id === "engine") {
+      const entryPose = journeyComposition?.pose ?? journeyGateway.entryPose;
+
+      if (entryPose) {
+        this.cameraDirector.travel(entryPose, 2);
+      }
+    }
 
     this.journeyDirector.begin(
       journey,
@@ -733,6 +774,17 @@ export class App {
 
         if (e.code === "KeyD" && !e.repeat) {
           this.devHUD.toggle();
+        }
+
+        if (import.meta.env.DEV && e.code === "KeyT" && !e.repeat) {
+          const slowMotionEnabled = this.journeyDirector.toggleSlowMotion();
+
+          console.log(
+            `JOURNEY SLOW-MO: ${slowMotionEnabled ? "3x" : "OFF"}`,
+          );
+
+          this.devHUD.update(true);
+          return;
         }
 
         const developmentThemes = {
@@ -775,21 +827,6 @@ export class App {
 
           this.journeyDirector.stop();
           this.disarmArmedInvitation();
-        }
-
-        // TEMP DEBUG
-        if (e.code === "KeyT") {
-          console.log("T pressed");
-
-          const pose =
-            this.themeManager.activeTheme?.engine?.getInspectionPose();
-
-          console.log("Inspection pose:", pose);
-
-          if (pose) {
-            this.cameraDirector.flightStyle = "linear";
-            this.cameraDirector.travel(pose);
-          }
         }
 
         if (e.code === "KeyG") {
@@ -1058,7 +1095,11 @@ export class App {
 
     this.updateCamera();
 
-    this.cameraDirector.update();
+    const journeyCameraDelta = this.journeyDirector.isActive()
+      ? this.journeyDirector.getScaledDelta(0.016)
+      : 0.016;
+
+    this.cameraDirector.update(journeyCameraDelta);
 
     this.exploreDirector.update(0.016);
 

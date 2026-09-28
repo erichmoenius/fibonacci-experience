@@ -22,9 +22,15 @@
 // =====================================================
 
 import { Journey } from "./Journey";
+
+const NORMAL_TIME_SCALE = 1.0;
+const SLOW_MOTION_TIME_SCALE = 1 / 3;
+
 export default class JourneyDirector {
   constructor(cameraDirector) {
     this.cameraDirector = cameraDirector;
+
+    this.timeScale = NORMAL_TIME_SCALE;
 
     this.activeJourney = null;
     this.activeJourneyTarget = null;
@@ -60,6 +66,22 @@ export default class JourneyDirector {
 
   isActive() {
     return this.activeJourney !== null;
+  }
+
+  isSlowMotionEnabled() {
+    return this.timeScale === SLOW_MOTION_TIME_SCALE;
+  }
+
+  toggleSlowMotion() {
+    this.timeScale = this.isSlowMotionEnabled()
+      ? NORMAL_TIME_SCALE
+      : SLOW_MOTION_TIME_SCALE;
+
+    return this.isSlowMotionEnabled();
+  }
+
+  getScaledDelta(delta = 0.016) {
+    return delta * this.timeScale;
   }
 
   begin(journey, target = null, crossing = null, destinationTheme = null) {
@@ -197,6 +219,6 @@ export default class JourneyDirector {
 
     if (!this.activeJourney) return;
 
-    this.activeJourney.update(delta);
+    this.activeJourney.update(this.getScaledDelta(delta));
   }
 }

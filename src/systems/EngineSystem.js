@@ -35,6 +35,8 @@ export default class EngineSystem {
 
     this.targetTransitEnergy = 0;
 
+    this.journeyCollapse = 0;
+
     // ------------------------------------------------
     //
     // INVITATION
@@ -458,6 +460,19 @@ export default class EngineSystem {
 
   acceptInvitation() {
     this.core.acceptInvitation();
+  }
+
+  setJourneyCollapse(value) {
+    this.journeyCollapse = THREE.MathUtils.clamp(value, 0, 1);
+    this.core.setJourneyCollapse(this.journeyCollapse);
+  }
+
+  setSingularitySwallow(value) {
+    this.core.setSingularitySwallow(value);
+  }
+
+  setJourneyPortalReveal(value) {
+    this.core.setJourneyPortalReveal(value);
   }
 
   setPresenceIntensity(value) {

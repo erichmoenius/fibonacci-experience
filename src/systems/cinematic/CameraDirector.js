@@ -178,6 +178,14 @@ export default class CameraDirector {
 
     this.approachRadius = 8.0;
 
+    this.approachOrbitAngle = 0;
+
+    this.approachStartAngle = 0;
+
+    this.approachStartRadius = 0;
+
+    this.approachStartYOffset = 0;
+
     this.horizonStartPosition = new THREE.Vector3();
 
     this.horizonStartLookTarget = new THREE.Vector3();
@@ -194,9 +202,23 @@ export default class CameraDirector {
 
     this.horizonRadius = 0.75;
 
+    this.horizonOrbitAngle = 0;
+
+    this.horizonStartAngle = 0;
+
+    this.horizonStartRadius = 0;
+
+    this.horizonStartYOffset = 0;
+
     this.crossingStartPosition = new THREE.Vector3();
 
     this.crossingForward = new THREE.Vector3();
+
+    this.crossingEntryAxis = new THREE.Vector3(0, 0, -1);
+
+    this.crossingEntryAxisFrozen = false;
+
+    this.crossingEntryAxisFreezeProgress = 0.89;
 
     this.crossingDirection = new THREE.Vector3();
 
@@ -215,6 +237,32 @@ export default class CameraDirector {
     this.crossingDuration = 4;
 
     this.crossingEndpointDistance = 0.75;
+
+    this.crossingOrbitAngle = 0;
+
+    this.crossingStartAngle = 0;
+
+    this.crossingStartRadius = 0;
+
+    this.crossingStartYOffset = 0;
+
+    this.crossingEasingPower = 1;
+
+    this.transitStartPosition = new THREE.Vector3();
+
+    this.transitTargetPosition = new THREE.Vector3();
+
+    this.transitForward = new THREE.Vector3();
+
+    this.transitRight = new THREE.Vector3();
+
+    this.transitUp = new THREE.Vector3();
+
+    this.transitActive = false;
+
+    this.transitElapsed = 0;
+
+    this.transitDuration = 4;
 
     // ------------------------------------------------
     // SETTINGS
@@ -322,6 +370,8 @@ export default class CameraDirector {
   cancel() {
     this.flightSystem.stop();
 
+    this.resetCrossingEntryAxis();
+
     this.cancelTravel();
   }
 
@@ -345,7 +395,7 @@ export default class CameraDirector {
     this.setMode(CameraMode.TRAVEL);
   }
 
-  beginCoreApproach(coreObject) {
+  beginCoreApproach(coreObject, options = {}) {
     if (!coreObject?.getWorldPosition) return;
 
     this.approachCoreObject = coreObject;
@@ -357,20 +407,34 @@ export default class CameraDirector {
 
     this.approachDirection.set(0, 0, 1);
 
+    this.approachRadius = options.radius ?? 8.0;
+    this.approachOrbitAngle = options.orbitAngle ?? 0;
+    this.tempB.copy(this.position).sub(this.approachCorePosition);
+    this.approachStartAngle = Math.atan2(this.tempB.x, this.tempB.z);
+    this.approachStartRadius = Math.hypot(this.tempB.x, this.tempB.z);
+    this.approachStartYOffset = this.tempB.y;
+
     this.approachActive = true;
   }
 
-  beginCoreHorizon(coreObject) {
+  beginCoreHorizon(coreObject, options = {}) {
     if (!coreObject?.getWorldPosition) return;
 
     this.approachCoreObject = coreObject;
     this.horizonElapsed = 0;
     this.horizonStartPosition.copy(this.position);
     this.horizonStartLookTarget.copy(this.currentTarget);
+    coreObject.getWorldPosition(this.horizonCorePosition);
+    this.horizonRadius = options.radius ?? 0.75;
+    this.horizonOrbitAngle = options.orbitAngle ?? 0;
+    this.tempB.copy(this.position).sub(this.horizonCorePosition);
+    this.horizonStartAngle = Math.atan2(this.tempB.x, this.tempB.z);
+    this.horizonStartRadius = Math.hypot(this.tempB.x, this.tempB.z);
+    this.horizonStartYOffset = this.tempB.y;
     this.horizonActive = true;
   }
 
-  beginCrossing(crossing) {
+  beginCrossing(crossing, options = {}) {
     const target = crossing?.target;
     const direction = crossing?.direction;
 
@@ -382,15 +446,53 @@ export default class CameraDirector {
     this.camera.getWorldDirection(this.crossingForward).normalize();
     this.crossingDirection.copy(direction).normalize();
     this.crossingEndpointDistance = crossing.endpointDistance ?? 0.75;
+    target.getWorldPosition(this.crossingCorePosition);
+    this.crossingEntryAxis
+      .subVectors(this.crossingCorePosition, this.position)
+      .normalize();
+    this.crossingEntryAxisFrozen = false;
+    this.tempB.copy(this.position).sub(this.crossingCorePosition);
+    this.crossingStartAngle = Math.atan2(this.tempB.x, this.tempB.z);
+    this.crossingStartRadius = Math.hypot(this.tempB.x, this.tempB.z);
+    this.crossingStartYOffset = this.tempB.y;
+    this.crossingOrbitAngle = options.orbitAngle ?? 0;
+    this.crossingEasingPower = options.easingPower ?? 1;
     this.crossingActive = true;
+  }
+
+  beginWormholeTravel(duration = 4, distance = 18) {
+    this.transitElapsed = 0;
+    this.transitDuration = duration;
+    this.transitStartPosition.copy(this.position);
+    this.camera.getWorldDirection(this.transitForward).normalize();
+    this.transitTargetPosition
+      .copy(this.transitStartPosition)
+      .addScaledVector(this.transitForward, distance);
+    this.transitRight
+      .crossVectors(this.transitForward, this.camera.up)
+      .normalize();
+    this.transitUp
+      .crossVectors(this.transitRight, this.transitForward)
+      .normalize();
+    this.transitActive = true;
   }
 
   isInJourney() {
     return this.journey !== null;
   }
 
+  getCrossingEntryAxis() {
+    return this.crossingEntryAxis;
+  }
+
+  resetCrossingEntryAxis() {
+    this.crossingEntryAxis.set(0, 0, -1);
+    this.crossingEntryAxisFrozen = false;
+  }
+
   returnHome(pose = null, immediate = false) {
     this.flightSystem.stop();
+    this.resetCrossingEntryAxis();
 
     // -------------------------------------------------
     // RESET FREE FLIGHT
@@ -423,7 +525,7 @@ export default class CameraDirector {
     }
   }
 
-  travel(targetPose) {
+  travel(targetPose, duration = null) {
     if (!this.currentPose) {
       throw new Error("currentPose is undefined");
     }
@@ -436,20 +538,20 @@ export default class CameraDirector {
       throw new Error("targetPose is undefined");
     }
 
-    const flight = this.createFlight(targetPose);
+    const flight = this.createFlight(targetPose, duration);
 
     this.logTravel(targetPose);
 
     this.beginFlight(flight);
   }
 
-  createFlight(targetPose) {
+  createFlight(targetPose, duration = null) {
     const flight = new Flight();
 
     flight.startPose.copy(this.currentPose);
     flight.targetPose.copy(targetPose);
 
-    flight.duration = this.journey ? 3.0 : 2.0;
+    flight.duration = duration ?? (this.journey ? 3.0 : 2.0);
 
     return flight;
   }
@@ -629,11 +731,30 @@ export default class CameraDirector {
         .copy(this.approachCorePosition)
         .addScaledVector(this.approachDirection, this.approachRadius);
 
-      this.currentPose.position.lerpVectors(
-        this.approachStartPosition,
-        this.approachTargetPosition,
-        eased,
-      );
+      if (this.approachOrbitAngle !== 0) {
+        const angle =
+          this.approachStartAngle + this.approachOrbitAngle * eased;
+        const radius = THREE.MathUtils.lerp(
+          this.approachStartRadius,
+          this.approachRadius,
+          eased,
+        );
+        const yOffset =
+          THREE.MathUtils.lerp(this.approachStartYOffset, 0, eased) +
+          Math.sin(progress * Math.PI) * 0.08;
+
+        this.currentPose.position.set(
+          this.approachCorePosition.x + Math.sin(angle) * radius,
+          this.approachCorePosition.y + yOffset,
+          this.approachCorePosition.z + Math.cos(angle) * radius,
+        );
+      } else {
+        this.currentPose.position.lerpVectors(
+          this.approachStartPosition,
+          this.approachTargetPosition,
+          eased,
+        );
+      }
 
       this.currentPose.lookTarget.lerpVectors(
         this.approachStartLookTarget,
@@ -671,11 +792,29 @@ export default class CameraDirector {
         .copy(this.horizonCorePosition)
         .addScaledVector(this.approachDirection, this.horizonRadius);
 
-      this.currentPose.position.lerpVectors(
-        this.horizonStartPosition,
-        this.horizonTargetPosition,
-        eased,
-      );
+      if (this.horizonOrbitAngle !== 0) {
+        const angle = this.horizonStartAngle + this.horizonOrbitAngle * eased;
+        const radius = THREE.MathUtils.lerp(
+          this.horizonStartRadius,
+          this.horizonRadius,
+          eased,
+        );
+        const yOffset =
+          THREE.MathUtils.lerp(this.horizonStartYOffset, 0, eased) +
+          Math.sin(progress * Math.PI) * 0.14;
+
+        this.currentPose.position.set(
+          this.horizonCorePosition.x + Math.sin(angle) * radius,
+          this.horizonCorePosition.y + yOffset,
+          this.horizonCorePosition.z + Math.cos(angle) * radius,
+        );
+      } else {
+        this.currentPose.position.lerpVectors(
+          this.horizonStartPosition,
+          this.horizonTargetPosition,
+          eased,
+        );
+      }
 
       this.currentPose.lookTarget.lerpVectors(
         this.horizonStartLookTarget,
@@ -704,28 +843,68 @@ export default class CameraDirector {
       );
 
       const progress = this.crossingElapsed / this.crossingDuration;
-      const eased = progress * progress * (3 - 2 * progress);
+      const eased =
+        this.crossingEasingPower === 1
+          ? progress * progress * (3 - 2 * progress)
+          : Math.pow(progress, this.crossingEasingPower);
 
       this.crossingCoreObject.getWorldPosition(this.crossingCorePosition);
 
-      this.crossingTargetPosition
-        .copy(this.crossingCorePosition)
-        .addScaledVector(
-          this.crossingDirection,
+      if (this.crossingOrbitAngle !== 0) {
+        const angle =
+          this.crossingStartAngle + this.crossingOrbitAngle * progress;
+        const radius = THREE.MathUtils.lerp(
+          this.crossingStartRadius,
           -this.crossingEndpointDistance,
+          eased,
         );
+        const yOffset =
+          THREE.MathUtils.lerp(this.crossingStartYOffset, 0, eased) +
+          Math.sin(progress * Math.PI) * 0.1 * (1 - eased);
 
-      this.currentPose.position.lerpVectors(
-        this.crossingStartPosition,
-        this.crossingTargetPosition,
-        eased,
-      );
+        this.currentPose.position.set(
+          this.crossingCorePosition.x + Math.sin(angle) * radius,
+          this.crossingCorePosition.y + yOffset,
+          this.crossingCorePosition.z + Math.cos(angle) * radius,
+        );
+      } else {
+        this.crossingTargetPosition
+          .copy(this.crossingCorePosition)
+          .addScaledVector(
+            this.crossingDirection,
+            -this.crossingEndpointDistance,
+          );
+
+        this.currentPose.position.lerpVectors(
+          this.crossingStartPosition,
+          this.crossingTargetPosition,
+          eased,
+        );
+      }
 
       this.position.copy(this.currentPose.position);
-      this.crossingLookTarget
-        .copy(this.position)
-        .addScaledVector(this.crossingForward, 10);
-      this.currentPose.lookTarget.copy(this.crossingLookTarget);
+      if (this.crossingOrbitAngle !== 0) {
+        if (!this.crossingEntryAxisFrozen) {
+          this.tempA.subVectors(this.crossingCorePosition, this.position);
+
+          if (this.tempA.lengthSq() > 0.000001) {
+            this.crossingEntryAxis.copy(this.tempA).normalize();
+          }
+
+          if (progress >= this.crossingEntryAxisFreezeProgress) {
+            this.crossingEntryAxisFrozen = true;
+          }
+        }
+
+        this.currentPose.lookTarget
+          .copy(this.position)
+          .addScaledVector(this.crossingEntryAxis, 10);
+      } else {
+        this.crossingLookTarget
+          .copy(this.position)
+          .addScaledVector(this.crossingForward, 10);
+        this.currentPose.lookTarget.copy(this.crossingLookTarget);
+      }
       this.currentTarget.copy(this.currentPose.lookTarget);
       this.lookTarget.copy(this.currentTarget);
       this.targetPosition.copy(this.position);
@@ -734,6 +913,48 @@ export default class CameraDirector {
 
       if (progress >= 1) {
         this.crossingActive = false;
+      }
+
+      return;
+    }
+
+    if (this.transitActive) {
+      this.transitElapsed = Math.min(
+        this.transitElapsed + delta,
+        this.transitDuration,
+      );
+
+      const progress = this.transitElapsed / this.transitDuration;
+      const eased = progress * progress * (3 - 2 * progress);
+      const spiralEnvelope = Math.sin(progress * Math.PI) * 0.12;
+      const spiralAngle = progress * Math.PI * 1.5;
+
+      this.currentPose.position.lerpVectors(
+        this.transitStartPosition,
+        this.transitTargetPosition,
+        eased,
+      );
+      this.currentPose.position
+        .addScaledVector(
+          this.transitRight,
+          Math.cos(spiralAngle) * spiralEnvelope,
+        )
+        .addScaledVector(
+          this.transitUp,
+          Math.sin(spiralAngle) * spiralEnvelope,
+        );
+      this.currentPose.lookTarget
+        .copy(this.currentPose.position)
+        .addScaledVector(this.transitForward, 10);
+      this.position.copy(this.currentPose.position);
+      this.currentTarget.copy(this.currentPose.lookTarget);
+      this.lookTarget.copy(this.currentTarget);
+      this.targetPosition.copy(this.position);
+
+      this.applyComputedPosition();
+
+      if (progress >= 1) {
+        this.transitActive = false;
       }
 
       return;
@@ -793,8 +1014,10 @@ export default class CameraDirector {
     this.approachActive = false;
     this.horizonActive = false;
     this.crossingActive = false;
+    this.transitActive = false;
     this.approachCoreObject = null;
     this.crossingCoreObject = null;
+    this.resetCrossingEntryAxis();
 
     this.setMode(CameraMode.EXPLORE);
   }

@@ -10,6 +10,9 @@ export default class EngineCore {
     this.ringPulse = 0;
     this.spark = 0;
     this.transitEnergy = 0;
+    this.journeyCollapse = 0;
+    this.singularitySwallow = 0;
+    this.journeyPortalReveal = 0;
     this.presenceIntensity = 0;
 
     // ------------------------------------------------
@@ -486,6 +489,8 @@ export default class EngineCore {
         clearcoat: 1.0,
 
         depthWrite: false,
+
+        side: THREE.DoubleSide,
       }),
     );
 
@@ -614,6 +619,27 @@ export default class EngineCore {
         this.innerCoreBaseEmissiveIntensity + presenceEmissiveIntensity;
     }
 
+    const portalRevealing = this.journeyPortalReveal > 0.001;
+
+    if (this.innerCore.material.transparent !== portalRevealing) {
+      this.innerCore.material.transparent = portalRevealing;
+      this.innerCore.material.depthWrite = !portalRevealing;
+      this.innerCore.material.needsUpdate = true;
+    }
+
+    if (this.singularity.material.transparent !== portalRevealing) {
+      this.singularity.material.transparent = portalRevealing;
+      this.singularity.material.needsUpdate = true;
+    }
+
+    this.innerCore.material.opacity = portalRevealing
+      ? 1 - THREE.MathUtils.smoothstep(this.journeyPortalReveal, 0.08, 0.42)
+      : 1;
+    this.innerCore.scale.setScalar(1 + this.journeyPortalReveal * 0.15);
+    this.singularity.material.opacity = portalRevealing
+      ? 1 - THREE.MathUtils.smoothstep(this.journeyPortalReveal, 0.05, 0.35)
+      : 1;
+
     const breathe = 1 + Math.sin(this.time * 0.45) * 0.008;
 
     this.shell.scale.setScalar(breathe);
@@ -647,11 +673,17 @@ export default class EngineCore {
     if (this.eventHorizon) {
       const horizonScale = 1 + Math.sin(this.time * 0.28) * 0.015;
 
-      this.eventHorizon.scale.setScalar(horizonScale);
+      this.eventHorizon.scale.setScalar(
+        horizonScale * (1 + this.singularitySwallow * 2.8),
+      );
     }
 
     this.eventHorizon.material.opacity =
-      0.16 + Math.sin(this.time * 0.22) * 0.02;
+      (0.16 +
+        Math.sin(this.time * 0.22) * 0.02 +
+        this.singularitySwallow * 0.82) *
+      (1 -
+        THREE.MathUtils.smoothstep(this.journeyPortalReveal, 0.35, 0.72));
 
     // ------------------------------------------------
     // ACCRETION RING
@@ -722,13 +754,14 @@ export default class EngineCore {
             THREE.MathUtils.clamp(radiusFactor, 0, 1),
           ) * particle.userData.speed;
 
-          particle.userData.angle += delta * orbitalSpeed;
+          particle.userData.angle +=
+            delta * orbitalSpeed * (1 + this.journeyCollapse * 7);
 
           particle.rotation.x += delta * particle.userData.tumble.x;
           particle.rotation.y += delta * particle.userData.tumble.y;
           particle.rotation.z += delta * particle.userData.tumble.z;
 
-          if (particle.userData.consume) {
+          if (particle.userData.consume && this.journeyCollapse === 0) {
             const gravity = THREE.MathUtils.inverseLerp(
               0.95,
               0.18,
@@ -760,7 +793,14 @@ export default class EngineCore {
           const wobble =
             Math.sin(this.time * 0.35 + particle.userData.drift * 2.0) * 0.012;
 
-          const orbitAngle = particle.userData.angle + wobble;
+          const collapse = THREE.MathUtils.smoothstep(
+            this.journeyCollapse,
+            0,
+            1,
+          );
+          const displayedRadius = animatedRadius * (1 - collapse);
+          const orbitAngle =
+            particle.userData.angle + wobble + collapse * collapse * 5;
 
           const cosNode = Math.cos(particle.userData.ascendingNode);
           const sinNode = Math.sin(particle.userData.ascendingNode);
@@ -781,14 +821,13 @@ export default class EngineCore {
 
           particle.position.set(
             (cosNode * cosAngle - sinNode * sinAngle * cosInclination) *
-              animatedRadius,
+              displayedRadius,
 
-            particle.userData.height +
-              sinAngle * sinInclination * animatedRadius +
-              verticalDrift,
+            (particle.userData.height + verticalDrift) * (1 - collapse) +
+              sinAngle * sinInclination * displayedRadius,
 
             (sinNode * cosAngle + cosNode * sinAngle * cosInclination) *
-              animatedRadius,
+              displayedRadius,
           );
 
           const fade = THREE.MathUtils.smoothstep(
@@ -797,13 +836,24 @@ export default class EngineCore {
             0.45,
           );
 
-          particle.material.opacity = fade;
+          const collapseFade = 1 - THREE.MathUtils.smoothstep(collapse, 0.86, 1);
+
+          particle.material.opacity = fade * collapseFade;
         });
       }
     }
   }
   setTransitEnergy(value) {
     this.transitEnergy = value;
+  }
+  setJourneyCollapse(value) {
+    this.journeyCollapse = THREE.MathUtils.clamp(value, 0, 1);
+  }
+  setSingularitySwallow(value) {
+    this.singularitySwallow = THREE.MathUtils.clamp(value, 0, 1);
+  }
+  setJourneyPortalReveal(value) {
+    this.journeyPortalReveal = THREE.MathUtils.clamp(value, 0, 1);
   }
   get object() {
     return this.group;

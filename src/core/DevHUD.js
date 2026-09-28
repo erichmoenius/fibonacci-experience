@@ -75,6 +75,11 @@ export class DevHUD {
       `Gateway:      ${journeyDirector.gatewayReady ? "READY" : "-"}`,
       `Armed:        ${armedGateway ? "YES" : "NO"}`,
       `Journey:      ${journey}`,
+      ...(import.meta.env.DEV
+        ? [
+            `JOURNEY SLOW-MO: ${journeyDirector.isSlowMotionEnabled() ? "3x" : "OFF"}`,
+          ]
+        : []),
     ].join("\n");
   }
 }
