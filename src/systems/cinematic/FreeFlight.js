@@ -547,8 +547,8 @@ export class FreeFlight {
   // ===================================================
 
   syncSteeringButtons(buttons) {
-    this.pointer.active = (buttons & 1) !== 0;
-    this.pointer.rmbActive = (buttons & 2) !== 0;
+    this.pointer.active = (buttons & 2) !== 0;
+    this.pointer.rmbActive = (buttons & 1) !== 0;
     if (!this.pointer.active) {
       this.input.z = 0;
       this.targetVelocity.z = 0;
