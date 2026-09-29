@@ -52,7 +52,7 @@ export class GalaxyTheme extends BaseTheme {
   }
 
   getEnvironment() {
-    return { world: false, stars: false, portal: false, stage: true };
+    return { world: false, stars: false, portal: false, stage: false };
   }
 
   getHomePose() {

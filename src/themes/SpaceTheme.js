@@ -58,13 +58,7 @@ export class SpaceTheme {
 
     this.coreWorldPosition = new THREE.Vector3();
 
-    this.transitWorldPosition = new THREE.Vector3();
-
-    this.transitLocalPosition = new THREE.Vector3();
-
-    this.transitLocalForward = new THREE.Vector3();
-
-    this.transitContainerQuaternion = new THREE.Quaternion();
+    this.journeyCorePosition = new THREE.Vector3();
 
     // ------------------------------------------------
     // ENGINE RELATIONSHIP
@@ -101,8 +95,6 @@ export class SpaceTheme {
     }
 
     this.container.add(this.group);
-
-    this.createJourneyPortalMouth();
 
     // ------------------------------------------------
     // 🖱️ SPACE ZOOM
@@ -261,101 +253,6 @@ export class SpaceTheme {
     return this.gateways;
   }
 
-  createJourneyPortalMouth() {
-    this.portalMouth = new THREE.Group();
-    this.portalMouth.name = "JourneyPortalMouth";
-    this.portalMouth.visible = false;
-
-    const diskGeometry = new THREE.CircleGeometry(1, 96);
-    const diskMaterial = new THREE.MeshBasicMaterial({
-      color: 0x010103,
-      transparent: true,
-      opacity: 1,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.portalMouthDisk = new THREE.Mesh(diskGeometry, diskMaterial);
-    this.portalMouthDisk.renderOrder = 1001;
-
-    const surroundGeometry = new THREE.RingGeometry(1, 8, 96);
-    const surroundMaterial = new THREE.MeshBasicMaterial({
-      color: 0x010103,
-      transparent: true,
-      opacity: 0,
-      depthTest: false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.portalMouthSurround = new THREE.Mesh(
-      surroundGeometry,
-      surroundMaterial,
-    );
-    this.portalMouthSurround.renderOrder = 1000;
-
-    const rimPoints = new THREE.EllipseCurve(
-      0,
-      0,
-      1,
-      1,
-      0,
-      Math.PI * 2,
-      false,
-      0,
-    ).getPoints(128);
-    const rimGeometry = new THREE.BufferGeometry().setFromPoints(rimPoints);
-    const rimMaterial = new THREE.LineBasicMaterial({
-      color: 0xff5a1f,
-      transparent: true,
-      opacity: 1,
-      blending: THREE.AdditiveBlending,
-      depthTest: false,
-      depthWrite: false,
-    });
-    this.portalMouthRim = new THREE.LineLoop(rimGeometry, rimMaterial);
-    this.portalMouthRim.renderOrder = 1002;
-
-    this.portalMouth.add(
-      this.portalMouthSurround,
-      this.portalMouthDisk,
-      this.portalMouthRim,
-    );
-    this.container.add(this.portalMouth);
-
-    this.portalMouthResources = [
-      diskGeometry,
-      diskMaterial,
-      surroundGeometry,
-      surroundMaterial,
-      rimGeometry,
-      rimMaterial,
-    ];
-  }
-
-  updateJourneyPortalMouth(reveal) {
-    if (!this.portalMouth) return;
-
-    if (reveal <= 0) {
-      this.portalMouth.visible = false;
-      return;
-    }
-
-    const expansion = Math.pow(
-      THREE.MathUtils.smoothstep(reveal, 0, 1),
-      1.2,
-    );
-    const radius = THREE.MathUtils.lerp(0.025, 3.6, expansion);
-
-    this.portalMouth.visible = true;
-    this.portalMouth.scale.setScalar(radius);
-    this.portalMouthDisk.material.opacity =
-      1 - THREE.MathUtils.smoothstep(reveal, 0.18, 0.62);
-    this.portalMouthSurround.material.opacity =
-      THREE.MathUtils.smoothstep(reveal, 0.3, 0.48) * 0.98;
-    this.portalMouthRim.material.opacity =
-      1 - THREE.MathUtils.smoothstep(reveal, 0.55, 1) * 0.75;
-  }
-
   getJourneyComposition() {
     this.group.updateWorldMatrix(true, true);
 
@@ -504,25 +401,9 @@ export class SpaceTheme {
     }
 
     const phase = this.journeyDirector?.getPhase();
-    const journey = this.journeyDirector?.getJourney();
-    const singularityProgress =
-      phase === "SINGULARITY"
-        ? THREE.MathUtils.clamp(journey?.phaseTime / 4, 0, 1)
-        : 0;
-    const portalReveal =
-      phase === "SINGULARITY"
-        ? THREE.MathUtils.smoothstep(singularityProgress, 0.62, 0.88)
-        : 0;
-
-    this.engine.setSingularitySwallow(
-      THREE.MathUtils.smoothstep(singularityProgress, 0.68, 1),
-    );
-    this.engine.setJourneyPortalReveal(portalReveal);
     this.engine.object.visible =
       phase !== "WORMHOLE" &&
-      phase !== "VOID" &&
-      portalReveal < 0.44;
-    this.updateJourneyPortalMouth(portalReveal);
+      phase !== "VOID";
 
     const collapseTargets = {
       APPROACH: 0.25,
@@ -551,44 +432,6 @@ export class SpaceTheme {
     // ------------------------------------------------
     // 🌀 WORMHOLE
     // ------------------------------------------------
-
-    if (portalReveal > 0) {
-      const crossing = this.gateways[0]?.crossing;
-      const crossingEntryAxis =
-        this.journeyDirector?.cameraDirector?.getCrossingEntryAxis?.();
-
-      if (crossing?.target && crossingEntryAxis?.lengthSq()) {
-        crossing.target.getWorldPosition(this.transitWorldPosition);
-        this.transitLocalPosition.copy(this.transitWorldPosition);
-        this.container.worldToLocal(this.transitLocalPosition);
-
-        this.container.getWorldQuaternion(this.transitContainerQuaternion);
-        this.transitLocalForward
-          .copy(crossingEntryAxis)
-          .applyQuaternion(this.transitContainerQuaternion.invert())
-          .normalize();
-
-        this.transitSystem?.prepare("wormhole", {
-          position: this.transitLocalPosition,
-          forward: this.transitLocalForward,
-          alignEntrance: true,
-        });
-        this.transitSystem?.setPreparedReveal(portalReveal);
-
-        this.portalMouth.position.copy(this.transitLocalPosition);
-        this.portalMouth.quaternion.setFromUnitVectors(
-          new THREE.Vector3(0, 0, -1),
-          this.transitLocalForward,
-        );
-      }
-    } else if (
-      phase !== "WORMHOLE" &&
-      phase !== "VOID" &&
-      phase !== "BIRTH" &&
-      this.transitSystem?.isPrepared()
-    ) {
-      this.transitSystem.cancelPrepared();
-    }
 
     const wormhole = this.transitSystem?.getObject();
 
@@ -622,6 +465,8 @@ export class SpaceTheme {
     this.engine.update(0.016);
 
     this.engine.core.object.getWorldPosition(this.coreWorldPosition);
+    this.journeyCorePosition.copy(this.coreWorldPosition);
+    this.group.worldToLocal(this.journeyCorePosition);
 
     const presenceDistance = state.travelerPosition
       ? state.travelerPosition.distanceTo(this.coreWorldPosition)
@@ -885,7 +730,7 @@ export class SpaceTheme {
 
     if (this.journeyCollapse > 0) {
       const starFade =
-        1 - THREE.MathUtils.smoothstep(this.journeyCollapse, 0.78, 1);
+        1 - THREE.MathUtils.smoothstep(this.journeyCollapse, 0.92, 1);
 
       this.far.points.material.opacity *= starFade;
       this.mid.points.material.opacity *= starFade;
@@ -1271,13 +1116,24 @@ force.add(orbit);
   }
 
   captureJourneyCollapseState() {
-    [this.far, this.mid, this.near].forEach((layer) => {
+    [this.far, this.mid, this.near].forEach((layer, layerIndex) => {
       layer.journeyPositions = layer.points.geometry.attributes.position.array.slice();
+      layer.journeySeedOffset = (layerIndex + 1) * 7919;
     });
 
-    [...this.communicationParticles, ...this.gravityDust].forEach((particle) => {
+    this.communicationParticles.forEach((particle, index) => {
       particle.userData.journeyPosition = particle.position.clone();
       particle.userData.journeyOpacity = particle.material.opacity;
+      particle.userData.journeyVariation =
+        particle.userData.captureStrength ??
+        ((index * 16807 + 17) % 2147483647) / 2147483647;
+    });
+
+    this.gravityDust.forEach((particle, index) => {
+      particle.userData.journeyPosition = particle.position.clone();
+      particle.userData.journeyOpacity = particle.material.opacity;
+      particle.userData.journeyVariation =
+        ((index * 48271 + 31) % 2147483647) / 2147483647;
     });
   }
 
@@ -1289,57 +1145,102 @@ force.add(orbit);
       positions.array.set(layer.journeyPositions);
       positions.needsUpdate = true;
       layer.journeyPositions = null;
+      layer.journeySeedOffset = null;
     });
 
-    [...this.communicationParticles, ...this.gravityDust].forEach((particle) => {
+    this.communicationParticles.forEach((particle) => {
       if (!particle.userData.journeyPosition) return;
 
       particle.position.copy(particle.userData.journeyPosition);
       particle.userData.velocity.set(0, 0, 0);
       particle.material.opacity = particle.userData.journeyOpacity;
       particle.userData.journeyPosition = null;
+      particle.userData.journeyVariation = null;
+    });
+
+    this.gravityDust.forEach((particle) => {
+      if (!particle.userData.journeyPosition) return;
+
+      particle.position.copy(particle.userData.journeyPosition);
+      particle.userData.velocity.set(0, 0, 0);
+      particle.material.opacity = particle.userData.journeyOpacity;
+      particle.userData.journeyPosition = null;
+      particle.userData.journeyVariation = null;
     });
   }
 
   applyJourneyStarCollapse() {
-    const target = this.engine.object.position;
+    const target = this.journeyCorePosition;
     const layers = [
-      { layer: this.far, delay: 0.22, turns: 2.2 },
-      { layer: this.mid, delay: 0.1, turns: 3.1 },
-      { layer: this.near, delay: 0, turns: 4 },
+      { layer: this.far, baseDelay: 0.025, turns: 2.2 },
+      { layer: this.mid, baseDelay: 0.012, turns: 3.1 },
+      { layer: this.near, baseDelay: 0, turns: 4 },
     ];
 
-    layers.forEach(({ layer, delay, turns }) => {
+    layers.forEach(({ layer, baseDelay, turns }) => {
       const source = layer.journeyPositions;
       if (!source) return;
 
       const positions = layer.points.geometry.attributes.position;
-      const progress = THREE.MathUtils.smoothstep(
-        THREE.MathUtils.clamp(
-          (this.journeyCollapse - delay) / (1 - delay),
-          0,
-          1,
-        ),
-        0,
-        1,
-      );
-      const inwardProgress = Math.pow(progress, 1.15);
-      const radiusScale = 1 - inwardProgress;
-      const angle = progress * turns * (0.35 + progress * 0.65);
-      const cosAngle = Math.cos(angle);
-      const sinAngle = Math.sin(angle);
+      const seedOffset = layer.journeySeedOffset ?? 0;
 
       for (let i = 0; i < positions.count; i++) {
         const i3 = i * 3;
+        const seed =
+          ((i + seedOffset) * 16807 + 101) % 2147483647;
+        const variation = seed / 2147483647;
+        const secondary =
+          ((seed * 48271 + 53) % 2147483647) / 2147483647;
+        const responseDelay = baseDelay + variation * 0.055;
+        const curvatureProgress = THREE.MathUtils.smoothstep(
+          THREE.MathUtils.clamp(
+            (this.journeyCollapse - responseDelay) / (0.48 - responseDelay),
+            0,
+            1,
+          ),
+          0,
+          1,
+        );
+        const inwardDelay = 0.14 + variation * 0.2;
+        const captureProgress = THREE.MathUtils.smoothstep(
+          THREE.MathUtils.clamp(
+            (this.journeyCollapse - inwardDelay) / (0.82 - inwardDelay),
+            0,
+            1,
+          ),
+          0,
+          1,
+        );
+        const inwardProgress = Math.pow(
+          captureProgress,
+          1.65 + secondary * 0.55,
+        );
+        const radiusScale = 1 - inwardProgress;
+        const direction = variation < 0.5 ? -1 : 1;
+        const angle =
+          direction *
+          curvatureProgress *
+          (turns * (0.72 + secondary * 0.65)) *
+          (0.22 + curvatureProgress * 0.78);
+        const cosAngle = Math.cos(angle);
+        const sinAngle = Math.sin(angle);
         const x = source[i3] - target.x;
         const y = source[i3 + 1] - target.y;
         const z = source[i3 + 2] - target.z;
+        const tilt =
+          (secondary - 0.5) * curvatureProgress * 0.9;
+        const cosTilt = Math.cos(tilt);
+        const sinTilt = Math.sin(tilt);
+        const rotatedX = x * cosAngle - y * sinAngle;
+        const rotatedY = x * sinAngle + y * cosAngle;
+        const rotatedZ = z * cosTilt - rotatedY * sinTilt;
+        const tiltedY = z * sinTilt + rotatedY * cosTilt;
 
         positions.setXYZ(
           i,
-          target.x + (x * cosAngle - y * sinAngle) * radiusScale,
-          target.y + (x * sinAngle + y * cosAngle) * radiusScale,
-          target.z + z * radiusScale,
+          target.x + rotatedX * radiusScale,
+          target.y + tiltedY * radiusScale,
+          target.z + rotatedZ * radiusScale,
         );
       }
 
@@ -1351,33 +1252,49 @@ force.add(orbit);
     const source = particle.userData.journeyPosition;
     if (!source) return;
 
-    const target = this.engine.object.position;
-    const delay = (1 - response) * 0.18;
+    const target = this.journeyCorePosition;
+    const variation = particle.userData.journeyVariation ?? 0.5;
+    const secondary = (variation * 7.13) % 1;
+    const delay = (1 - response) * 0.12 + variation * 0.2;
     const progress = THREE.MathUtils.smoothstep(
       THREE.MathUtils.clamp(
-        (this.journeyCollapse - delay) / (1 - delay),
+        (this.journeyCollapse - delay) / (0.82 - delay),
         0,
         1,
       ),
       0,
       1,
     );
-    const radiusScale = 1 - progress;
-    const angle = progress * turns;
+    const inwardProgress = Math.pow(progress, 1.45 + secondary * 0.5);
+    const radiusScale = 1 - inwardProgress;
+    const direction = variation < 0.5 ? -1 : 1;
+    const angle =
+      direction *
+      progress *
+      turns *
+      (0.72 + secondary * 0.7) *
+      (0.28 + progress * 0.72);
     const cosAngle = Math.cos(angle);
     const sinAngle = Math.sin(angle);
     const x = source.x - target.x;
     const y = source.y - target.y;
     const z = source.z - target.z;
+    const tilt = (secondary - 0.5) * progress * 1.1;
+    const cosTilt = Math.cos(tilt);
+    const sinTilt = Math.sin(tilt);
+    const rotatedX = x * cosAngle - y * sinAngle;
+    const rotatedY = x * sinAngle + y * cosAngle;
+    const rotatedZ = z * cosTilt - rotatedY * sinTilt;
+    const tiltedY = z * sinTilt + rotatedY * cosTilt;
 
     particle.position.set(
-      target.x + (x * cosAngle - y * sinAngle) * radiusScale,
-      target.y + (x * sinAngle + y * cosAngle) * radiusScale,
-      target.z + z * radiusScale,
+      target.x + rotatedX * radiusScale,
+      target.y + tiltedY * radiusScale,
+      target.z + rotatedZ * radiusScale,
     );
     particle.material.opacity =
       particle.userData.journeyOpacity *
-      (1 - THREE.MathUtils.smoothstep(progress, 0.8, 1));
+      (1 - THREE.MathUtils.smoothstep(inwardProgress, 0.86, 1));
   }
 
   // ------------------------------------------------
@@ -1386,10 +1303,6 @@ force.add(orbit);
 
   destroy() {
     this.setJourneyCollapse(0);
-
-    this.portalMouth?.removeFromParent();
-    this.portalMouthResources?.forEach((resource) => resource.dispose());
-    this.portalMouthResources = [];
 
     this.plasmaFolder?.destroy();
 

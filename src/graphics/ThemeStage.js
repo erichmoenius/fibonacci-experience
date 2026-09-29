@@ -44,4 +44,8 @@ getContent(){
 return this.content;
 }
 
+setVisible(visible){
+this.glass.visible = visible;
+}
+
 }

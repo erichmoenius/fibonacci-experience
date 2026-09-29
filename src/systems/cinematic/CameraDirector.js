@@ -214,11 +214,9 @@ export default class CameraDirector {
 
     this.crossingForward = new THREE.Vector3();
 
-    this.crossingEntryAxis = new THREE.Vector3(0, 0, -1);
+    this.crossingPreviousPosition = new THREE.Vector3();
 
-    this.crossingEntryAxisFrozen = false;
-
-    this.crossingEntryAxisFreezeProgress = 0.89;
+    this.crossingVelocity = new THREE.Vector3();
 
     this.crossingDirection = new THREE.Vector3();
 
@@ -263,6 +261,8 @@ export default class CameraDirector {
     this.transitElapsed = 0;
 
     this.transitDuration = 4;
+
+    this.transitInitialSlope = 0.5;
 
     // ------------------------------------------------
     // SETTINGS
@@ -370,8 +370,6 @@ export default class CameraDirector {
   cancel() {
     this.flightSystem.stop();
 
-    this.resetCrossingEntryAxis();
-
     this.cancelTravel();
   }
 
@@ -447,10 +445,8 @@ export default class CameraDirector {
     this.crossingDirection.copy(direction).normalize();
     this.crossingEndpointDistance = crossing.endpointDistance ?? 0.75;
     target.getWorldPosition(this.crossingCorePosition);
-    this.crossingEntryAxis
-      .subVectors(this.crossingCorePosition, this.position)
-      .normalize();
-    this.crossingEntryAxisFrozen = false;
+    this.crossingPreviousPosition.copy(this.position);
+    this.crossingVelocity.set(0, 0, 0);
     this.tempB.copy(this.position).sub(this.crossingCorePosition);
     this.crossingStartAngle = Math.atan2(this.tempB.x, this.tempB.z);
     this.crossingStartRadius = Math.hypot(this.tempB.x, this.tempB.z);
@@ -474,6 +470,15 @@ export default class CameraDirector {
     this.transitUp
       .crossVectors(this.transitRight, this.transitForward)
       .normalize();
+    const incomingForwardSpeed = Math.max(
+      0,
+      this.crossingVelocity.dot(this.transitForward),
+    );
+    this.transitInitialSlope = THREE.MathUtils.clamp(
+      (incomingForwardSpeed * duration) / Math.max(distance, 0.001),
+      0.2,
+      1.2,
+    );
     this.transitActive = true;
   }
 
@@ -481,18 +486,8 @@ export default class CameraDirector {
     return this.journey !== null;
   }
 
-  getCrossingEntryAxis() {
-    return this.crossingEntryAxis;
-  }
-
-  resetCrossingEntryAxis() {
-    this.crossingEntryAxis.set(0, 0, -1);
-    this.crossingEntryAxisFrozen = false;
-  }
-
   returnHome(pose = null, immediate = false) {
     this.flightSystem.stop();
-    this.resetCrossingEntryAxis();
 
     // -------------------------------------------------
     // RESET FREE FLIGHT
@@ -883,28 +878,22 @@ export default class CameraDirector {
       }
 
       this.position.copy(this.currentPose.position);
-      if (this.crossingOrbitAngle !== 0) {
-        if (!this.crossingEntryAxisFrozen) {
-          this.tempA.subVectors(this.crossingCorePosition, this.position);
+      this.crossingVelocity
+        .subVectors(this.position, this.crossingPreviousPosition)
+        .divideScalar(Math.max(delta, 0.000001));
+      this.crossingPreviousPosition.copy(this.position);
+      this.tempA.copy(this.crossingVelocity);
 
-          if (this.tempA.lengthSq() > 0.000001) {
-            this.crossingEntryAxis.copy(this.tempA).normalize();
-          }
-
-          if (progress >= this.crossingEntryAxisFreezeProgress) {
-            this.crossingEntryAxisFrozen = true;
-          }
-        }
-
-        this.currentPose.lookTarget
-          .copy(this.position)
-          .addScaledVector(this.crossingEntryAxis, 10);
+      if (this.tempA.lengthSq() > 0.000001) {
+        this.tempA.normalize();
       } else {
-        this.crossingLookTarget
-          .copy(this.position)
-          .addScaledVector(this.crossingForward, 10);
-        this.currentPose.lookTarget.copy(this.crossingLookTarget);
+        this.tempA.copy(this.crossingForward);
       }
+
+      this.crossingLookTarget
+        .copy(this.position)
+        .addScaledVector(this.tempA, 10);
+      this.currentPose.lookTarget.copy(this.crossingLookTarget);
       this.currentTarget.copy(this.currentPose.lookTarget);
       this.lookTarget.copy(this.currentTarget);
       this.targetPosition.copy(this.position);
@@ -925,7 +914,13 @@ export default class CameraDirector {
       );
 
       const progress = this.transitElapsed / this.transitDuration;
-      const eased = progress * progress * (3 - 2 * progress);
+      const initialSlope = this.transitInitialSlope;
+      const progress2 = progress * progress;
+      const progress3 = progress2 * progress;
+      const eased =
+        initialSlope * progress +
+        (3 - 2 * initialSlope) * progress2 +
+        (initialSlope - 2) * progress3;
       const spiralEnvelope = Math.sin(progress * Math.PI) * 0.12;
       const spiralAngle = progress * Math.PI * 1.5;
 
@@ -1017,7 +1012,6 @@ export default class CameraDirector {
     this.transitActive = false;
     this.approachCoreObject = null;
     this.crossingCoreObject = null;
-    this.resetCrossingEntryAxis();
 
     this.setMode(CameraMode.EXPLORE);
   }

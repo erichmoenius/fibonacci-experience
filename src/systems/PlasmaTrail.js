@@ -18,7 +18,7 @@ export default class PlasmaTrail {
 
     console.log("🧪 PLASMA TRAIL CREATED — HIDDEN");
 
-    const geometry = new THREE.SphereGeometry(0.02, 12, 12);
+    const geometry = new THREE.SphereGeometry(0.035, 12, 12);
 
     const material = new THREE.MeshBasicMaterial({
       color: 0xff4444,
@@ -53,7 +53,7 @@ export default class PlasmaTrail {
         depthWrite: false,
       });
       const tail = new THREE.Mesh(
-        new THREE.SphereGeometry(0.012 - i * 0.001, 10, 10),
+        new THREE.SphereGeometry(0.022 - i * 0.0018, 10, 10),
         tailMaterial,
       );
 

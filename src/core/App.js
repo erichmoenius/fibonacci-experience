@@ -919,6 +919,11 @@ export class App {
     const theme = this.themeManager.activeTheme;
 
     const env = theme?.getEnvironment ? theme.getEnvironment() : {};
+    const cameraFar = theme?.getCameraFar?.() ?? 100;
+    if (this.camera.far !== cameraFar) {
+      this.camera.far = cameraFar;
+      this.camera.updateProjectionMatrix();
+    }
 
     this.world.setActive(env.world ?? true);
 
@@ -931,9 +936,7 @@ export class App {
       env.legacyStars ?? !this.renderer.celestialStarfield.active,
     );
 
-    if (this.stage?.mesh) {
-      this.stage.mesh.visible = env.stage ?? true;
-    }
+    this.stage?.setVisible(env.stage ?? true);
   }
 
   // ------------------------------------------------

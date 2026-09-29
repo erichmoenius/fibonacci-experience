@@ -3,27 +3,9 @@ export default class TransitSystem {
   constructor() {
     this.active = false;
 
-    this.prepared = false;
-
     this.type = null;
 
     this.currentTransit = null;
-  }
-
-  prepare(type, context = {}) {
-    if (this.active && this.type === type) return this.currentTransit;
-
-    if (!this.currentTransit || this.type !== type) {
-      this.currentTransit?.dispose();
-      this.currentTransit =
-        type === "wormhole" ? new WormholeTransit() : null;
-      this.type = type;
-    }
-
-    this.prepared = Boolean(this.currentTransit);
-    this.currentTransit?.setPose(context);
-
-    return this.currentTransit;
   }
 
   start(type, context = {}) {
@@ -32,18 +14,9 @@ export default class TransitSystem {
     this.type = type;
 
     if (type === "wormhole") {
-      const usePreparedTransit = this.prepared && this.currentTransit;
-
-      if (!usePreparedTransit) {
-        this.currentTransit = new WormholeTransit();
-      }
-
-      this.currentTransit.start(
-        usePreparedTransit ? { preservePose: true } : context,
-      );
+      this.currentTransit = new WormholeTransit();
+      this.currentTransit.start(context);
     }
-
-    this.prepared = false;
 
     console.log("Transit started:", type);
   }
@@ -59,33 +32,15 @@ export default class TransitSystem {
 
     this.active = false;
 
-    this.prepared = false;
-
     this.type = null;
 
     console.log("Transit stopped");
   }
 
   update(delta) {
-    if (!this.active && !this.prepared) return;
+    if (!this.active) return;
 
     this.currentTransit?.update(delta);
-  }
-
-  setPreparedReveal(value) {
-    if (!this.prepared) return;
-
-    this.currentTransit?.setReveal(value);
-  }
-
-  cancelPrepared() {
-    if (!this.prepared) return;
-
-    this.currentTransit?.getObject()?.removeFromParent();
-    this.currentTransit?.dispose();
-    this.currentTransit = null;
-    this.prepared = false;
-    this.type = null;
   }
 
   close(duration = 1) {
@@ -94,10 +49,6 @@ export default class TransitSystem {
 
   isActive() {
     return this.active;
-  }
-
-  isPrepared() {
-    return this.prepared;
   }
 
   getType() {

@@ -2,10 +2,14 @@ import * as THREE from "three";
 import { BaseTheme } from "./BaseTheme.js";
 import { SolarSystem } from "../systems/SolarSystem.js";
 import { PlanetaryFlight } from "../systems/PlanetaryFlight.js";
+import { PlanetaryMilkyWay } from "../systems/PlanetaryMilkyWay.js";
+import { PlanetaryDeepSpace } from "../systems/PlanetaryDeepSpace.js";
 
 export class PlanetaryTheme extends BaseTheme {
   constructor(container, gui) {
     super(container, gui);
+    this.milkyWay = new PlanetaryMilkyWay(container);
+    this.deepSpace = new PlanetaryDeepSpace(container);
     this.solarSystem = new SolarSystem(container);
     this.flight = new PlanetaryFlight(this.solarSystem);
     this.lastUpdateTime = null;
@@ -38,11 +42,17 @@ export class PlanetaryTheme extends BaseTheme {
     };
   }
 
+  getCameraFar() {
+    return 320;
+  }
+
   getGateways() {
     return [];
   }
 
   destroy() {
+    this.deepSpace.dispose();
+    this.milkyWay.dispose();
     this.solarSystem.dispose();
     if (this.backgroundParticleField) {
       this.backgroundParticleField.visible = this.backgroundParticleFieldWasVisible;

@@ -4,7 +4,6 @@ import { TransitState } from "./TransitState.js";
 const TUNNEL_LENGTH = 42;
 const RING_COUNT = 20;
 const PARTICLE_COUNT = 900;
-const SHELL_FRONT_OFFSET = 1;
 
 export default class WormholeTransit {
   constructor() {
@@ -119,20 +118,13 @@ export default class WormholeTransit {
     this.resources.push(geometry, material);
   }
 
-  setPose({ position, forward, alignEntrance = false } = {}) {
+  setPose({ position, forward } = {}) {
     const normalizedForward = forward?.lengthSq()
       ? forward.clone().normalize()
       : null;
 
     if (position) {
       this.group.position.copy(position);
-
-      if (alignEntrance && normalizedForward) {
-        this.group.position.addScaledVector(
-          normalizedForward,
-          SHELL_FRONT_OFFSET,
-        );
-      }
     }
     if (normalizedForward) {
       this.group.quaternion.setFromUnitVectors(
@@ -140,11 +132,6 @@ export default class WormholeTransit {
         normalizedForward,
       );
     }
-  }
-
-  setReveal(value) {
-    this.visibility = THREE.MathUtils.clamp(value, 0, 1);
-    this.applyVisibility();
   }
 
   applyVisibility() {
@@ -159,17 +146,10 @@ export default class WormholeTransit {
       this.particles.material.userData.baseOpacity * this.visibility;
   }
 
-  start({ position, forward, preservePose = false } = {}) {
+  start({ position, forward } = {}) {
     this.state = TransitState.OPENING;
 
-    if (!preservePose) {
-      this.setPose({ position, forward });
-    }
-
-    this.openingElapsed = Math.max(
-      this.openingElapsed,
-      this.visibility * 0.6,
-    );
+    this.setPose({ position, forward });
 
     console.log("🌀 Wormhole opening");
   }

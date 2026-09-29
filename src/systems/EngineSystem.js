@@ -467,14 +467,6 @@ export default class EngineSystem {
     this.core.setJourneyCollapse(this.journeyCollapse);
   }
 
-  setSingularitySwallow(value) {
-    this.core.setSingularitySwallow(value);
-  }
-
-  setJourneyPortalReveal(value) {
-    this.core.setJourneyPortalReveal(value);
-  }
-
   setPresenceIntensity(value) {
     this.core.setPresenceIntensity(value);
   }
