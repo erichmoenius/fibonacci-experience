@@ -10,12 +10,36 @@ export const EngineJourneyPhase = {
   BIRTH: "BIRTH",
 };
 
+const GRAVITY_PHASE_START = {
+  [EngineJourneyPhase.START]: 0,
+  [EngineJourneyPhase.APPROACH]: 2,
+  [EngineJourneyPhase.HORIZON]: 5,
+  [EngineJourneyPhase.SINGULARITY]: 8,
+  [EngineJourneyPhase.WORMHOLE]: 12,
+  [EngineJourneyPhase.VOID]: 12,
+  [EngineJourneyPhase.BIRTH]: 12,
+};
+const GRAVITY_DURATION = 12;
+
 export class EngineJourney extends Journey {
   constructor() {
     super("engine");
 
     this.phase = EngineJourneyPhase.START;
     this.phaseTime = 0;
+  }
+
+  start() {
+    this.completed = false;
+    this.cancelled = false;
+    this.phase = EngineJourneyPhase.START;
+    this.phaseTime = 0;
+  }
+
+  getGravityProgress() {
+    const elapsed = (GRAVITY_PHASE_START[this.phase] ?? 0) + this.phaseTime;
+
+    return Math.min(Math.max(elapsed / GRAVITY_DURATION, 0), 1);
   }
 
   update(delta) {
@@ -53,7 +77,7 @@ export class EngineJourney extends Journey {
       console.log("EngineJourney → SINGULARITY");
     }
 
-    if (this.phase === EngineJourneyPhase.SINGULARITY && this.phaseTime >= 4) {
+    if (this.phase === EngineJourneyPhase.SINGULARITY && this.phaseTime >= 2) {
       this.phase = EngineJourneyPhase.WORMHOLE;
 
       this.phaseTime = 0;

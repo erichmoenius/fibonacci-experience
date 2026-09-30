@@ -78,38 +78,14 @@ export class App {
     this.journeyDirector = new JourneyDirector(this.cameraDirector);
 
     this.journeyDirector.onApproach = (coreObject) => {
-      if (this.journeyDirector.getJourney()?.id === "engine") {
-        this.cameraDirector.beginCoreApproach(coreObject, {
-          radius: 6.2,
-          orbitAngle: 0.12,
-        });
-        return;
-      }
-
       this.cameraDirector.beginCoreApproach(coreObject);
     };
 
     this.journeyDirector.onHorizon = (coreObject) => {
-      if (this.journeyDirector.getJourney()?.id === "engine") {
-        this.cameraDirector.beginCoreHorizon(coreObject, {
-          radius: 1.4,
-          orbitAngle: 0.55,
-        });
-        return;
-      }
-
       this.cameraDirector.beginCoreHorizon(coreObject);
     };
 
     this.journeyDirector.onSingularity = (crossing) => {
-      if (this.journeyDirector.getJourney()?.id === "engine") {
-        this.cameraDirector.beginCrossing(crossing, {
-          orbitAngle: 0.9,
-          easingPower: 4,
-        });
-        return;
-      }
-
       this.cameraDirector.beginCrossing(crossing);
     };
 
@@ -124,13 +100,7 @@ export class App {
     this.journeyDirector.onTransit = (type) => {
       console.log("🌌 Transit requested:", type);
 
-      const forward = this.camera.getWorldDirection(new THREE.Vector3());
-
-      this.transitSystem.start(type, {
-        position: this.cameraDirector.getPosition(),
-        forward,
-      });
-      this.cameraDirector.beginWormholeTravel(4, 18);
+      this.transitSystem.start(type);
     };
 
     // ------------------------------------------------
@@ -169,7 +139,6 @@ export class App {
     this.journeyDirector.onVoidStart = () => {
       console.log("🌑 VOID");
 
-      this.transitSystem.close(1);
       this.renderer.fadeOut(1);
     };
 
@@ -718,8 +687,6 @@ export class App {
   beginGatewayJourney(journeyGateway) {
     const journey = journeyGateway.journey;
     const theme = this.themeManager.activeTheme;
-    const journeyComposition =
-      journey.id === "engine" ? theme?.getJourneyComposition?.() : null;
 
     if (
       journey.id === "engine" &&
@@ -731,14 +698,6 @@ export class App {
     this.disarmArmedInvitation();
 
     this.cameraDirector.beginJourney(journey);
-
-    if (journey.id === "engine") {
-      const entryPose = journeyComposition?.pose ?? journeyGateway.entryPose;
-
-      if (entryPose) {
-        this.cameraDirector.travel(entryPose, 2);
-      }
-    }
 
     this.journeyDirector.begin(
       journey,

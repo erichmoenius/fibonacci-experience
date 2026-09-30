@@ -10,8 +10,9 @@ export default class EngineCore {
     this.ringPulse = 0;
     this.spark = 0;
     this.transitEnergy = 0;
-    this.journeyCollapse = 0;
     this.presenceIntensity = 0;
+    this.journeyProgress = 0;
+    this.journeyDebrisCaptured = false;
 
     // ------------------------------------------------
     // CORE PRESENCE COLOR
@@ -133,6 +134,10 @@ export default class EngineCore {
 
       1.015,
     );
+
+    this.accretionRingJourneyScale = this.accretionRing.scale.clone();
+    this.accretionRingJourneyEmissiveIntensity =
+      this.accretionRing.material.emissiveIntensity;
 
     // ------------------------------------------------
     // ORBIT PARTICLES
@@ -456,6 +461,12 @@ export default class EngineCore {
 
     this.group.add(this.innerCore);
 
+    this.innerCoreJourneyColor = this.innerCore.material.color.clone();
+    this.innerCoreJourneyEmissive = this.innerCore.material.emissive.clone();
+    this.innerCoreJourneyScale = this.innerCore.scale.clone();
+    this.innerCoreJourneyDarkColor = new THREE.Color(0x010101);
+    this.innerCoreJourneyDarkEmissive = new THREE.Color(0x050100);
+
     this.group.position.set(0.04, -0.03, 0.02);
 
     // ------------------------------------------------
@@ -491,6 +502,11 @@ export default class EngineCore {
     );
 
     this.group.add(this.eventHorizon);
+
+    this.singularityJourneyScale = this.singularity.scale.clone();
+    this.singularityJourneyVisible = this.singularity.visible;
+    this.eventHorizonJourneyScale = this.eventHorizon.scale.clone();
+    this.eventHorizonJourneyOpacity = this.eventHorizon.material.opacity;
 
     // ------------------------------------------------
     // PHOTON ARC
@@ -575,8 +591,148 @@ export default class EngineCore {
     this.presenceIntensity = THREE.MathUtils.clamp(value, 0, 1);
   }
 
+  setJourneyProgress(value) {
+    const next = THREE.MathUtils.clamp(value, 0, 1);
+
+    if (next > 0 && !this.journeyDebrisCaptured) {
+      this.captureJourneyDebrisState();
+    }
+
+    if (next === 0 && this.journeyProgress > 0) {
+      this.resetJourneyVisuals();
+      return;
+    }
+
+    this.journeyProgress = next;
+  }
+
+  resetJourneyVisuals() {
+    this.journeyProgress = 0;
+    this.innerCore.material.color.copy(this.innerCoreJourneyColor);
+    this.innerCore.material.emissive.copy(this.innerCoreJourneyEmissive);
+    this.innerCore.material.emissiveIntensity =
+      this.innerCoreBaseEmissiveIntensity +
+      this.presenceIntensity * this.innerCorePresenceEmissiveBoost;
+    this.innerCore.scale.copy(this.innerCoreJourneyScale);
+    this.singularity.scale.copy(this.singularityJourneyScale);
+    this.singularity.visible = this.singularityJourneyVisible;
+    this.eventHorizon.scale.copy(this.eventHorizonJourneyScale);
+    this.eventHorizon.material.opacity = this.eventHorizonJourneyOpacity;
+    this.accretionRing.scale.copy(this.accretionRingJourneyScale);
+    this.accretionRing.material.emissiveIntensity =
+      this.accretionRingJourneyEmissiveIntensity;
+    this.restoreJourneyDebrisState();
+  }
+
+  captureJourneyDebrisState() {
+    this.orbitParticles.forEach((particle) => {
+      particle.userData.journeyState = {
+        radius: particle.userData.radius,
+        angle: particle.userData.angle,
+        visible: particle.visible,
+        opacity: particle.material.opacity,
+        position: particle.position.clone(),
+        rotation: particle.rotation.clone(),
+      };
+    });
+    this.journeyDebrisCaptured = true;
+  }
+
+  restoreJourneyDebrisState() {
+    if (!this.journeyDebrisCaptured) return;
+
+    this.orbitParticles.forEach((particle) => {
+      const state = particle.userData.journeyState;
+      if (!state) return;
+
+      particle.userData.radius = state.radius;
+      particle.userData.angle = state.angle;
+      particle.visible = state.visible;
+      particle.material.opacity = state.opacity;
+      particle.position.copy(state.position);
+      particle.rotation.copy(state.rotation);
+      particle.userData.journeyState = null;
+    });
+    this.journeyDebrisCaptured = false;
+  }
+
+  updateJourneyDebris(particle, delta) {
+    const state = particle.userData.journeyState;
+    if (!state?.visible) {
+      particle.visible = false;
+      return;
+    }
+
+    const variation = (Math.sin(particle.userData.drift * 12.9898) + 1) * 0.5;
+    const secondary = (variation * 7.13) % 1;
+    const delay = 0.003 + variation * 0.022;
+    const progress = THREE.MathUtils.clamp(
+      (this.journeyProgress - delay) / (1 - delay),
+      0,
+      1,
+    );
+    const curved = THREE.MathUtils.smoothstep(progress, 0, 0.38);
+    const infall = Math.pow(
+      THREE.MathUtils.clamp((progress - 0.1) / 0.9, 0, 1),
+      1.7 + secondary * 0.3,
+    );
+    const radiusScale = 1 - infall;
+    const direction = variation < 0.12 ? -1 : 1;
+    const angle =
+      state.angle +
+      direction *
+        (curved * 1.25 +
+          progress * progress * (6.2 + variation * 3.8));
+    const animatedRadius =
+      state.radius +
+      Math.sin(
+        this.time * particle.userData.driftSpeed + particle.userData.drift,
+      ) *
+        particle.userData.driftAmount;
+    const displayedRadius = animatedRadius * radiusScale;
+
+    particle.visible = displayedRadius >= 0.055;
+    if (!particle.visible) return;
+
+    particle.rotation.x += delta * particle.userData.tumble.x;
+    particle.rotation.y += delta * particle.userData.tumble.y;
+    particle.rotation.z += delta * particle.userData.tumble.z;
+
+    const cosNode = Math.cos(particle.userData.ascendingNode);
+    const sinNode = Math.sin(particle.userData.ascendingNode);
+    const cosInclination = Math.cos(particle.userData.inclination);
+    const sinInclination = Math.sin(particle.userData.inclination);
+    const orbitPhase = angle - particle.userData.ascendingNode;
+    const cosAngle = Math.cos(orbitPhase);
+    const sinAngle = Math.sin(orbitPhase);
+    const verticalDrift =
+      Math.sin(
+        this.time * particle.userData.driftSpeed + particle.userData.drift,
+      ) *
+      particle.userData.driftAmount *
+      0.25;
+
+    particle.position.set(
+      (cosNode * cosAngle - sinNode * sinAngle * cosInclination) *
+        displayedRadius,
+      (particle.userData.height + verticalDrift) * radiusScale +
+        sinAngle * sinInclination * displayedRadius,
+      (sinNode * cosAngle + cosNode * sinAngle * cosInclination) *
+        displayedRadius,
+    );
+    particle.material.opacity =
+      state.opacity * THREE.MathUtils.smoothstep(displayedRadius, 0.055, 0.14);
+  }
+
   update(delta) {
     this.time += delta;
+
+    const journeyProgress = this.journeyProgress;
+    const concentration = THREE.MathUtils.smoothstep(journeyProgress, 0.08, 0.68);
+    const darkening = THREE.MathUtils.smoothstep(journeyProgress, 0.42, 0.94);
+    const earlyReaction = Math.sin(
+      Math.PI * THREE.MathUtils.smoothstep(journeyProgress, 0, 0.58),
+    );
 
     // ------------------------------------------------
     //
@@ -601,19 +757,47 @@ export default class EngineCore {
     const presenceEmissiveIntensity =
       this.presenceIntensity * this.innerCorePresenceEmissiveBoost;
 
+    let normalEmissiveIntensity;
+
     if (this.invitationActive) {
       const invitationEmissiveIntensity =
         this.innerCoreInvitationBaseEmissiveIntensity +
         invitationPulse * this.innerCoreInvitationPulseEmissiveBoost;
 
-      this.innerCore.material.emissiveIntensity =
+      normalEmissiveIntensity =
         this.innerCoreBaseEmissiveIntensity +
         presenceEmissiveIntensity +
         invitationEmissiveIntensity;
     } else {
-      this.innerCore.material.emissiveIntensity =
+      normalEmissiveIntensity =
         this.innerCoreBaseEmissiveIntensity + presenceEmissiveIntensity;
     }
+
+    const journeyPulse =
+      earlyReaction *
+      (1.15 + Math.sin(this.time * (2.2 + concentration * 1.8)) * 0.22);
+    const orangeStrength = 1 - darkening;
+
+    this.innerCore.material.emissiveIntensity =
+      (normalEmissiveIntensity + journeyPulse) * orangeStrength;
+    this.innerCore.material.color
+      .copy(this.innerCoreJourneyColor)
+      .lerp(this.innerCoreJourneyDarkColor, darkening);
+    this.innerCore.material.emissive
+      .copy(this.innerCoreJourneyEmissive)
+      .lerp(this.innerCoreJourneyDarkEmissive, darkening);
+
+    const coreBreath =
+      1 +
+      earlyReaction * (0.055 + Math.sin(this.time * 2.4) * 0.018) -
+      darkening * 0.12;
+    this.innerCore.scale
+      .copy(this.innerCoreJourneyScale)
+      .multiplyScalar(coreBreath);
+
+    this.singularity.scale
+      .copy(this.singularityJourneyScale)
+      .multiplyScalar(1 + concentration * 0.32);
 
     const breathe = 1 + Math.sin(this.time * 0.45) * 0.008;
 
@@ -646,20 +830,27 @@ export default class EngineCore {
     // ------------------------------------------------
 
     if (this.eventHorizon) {
-      const horizonScale = 1 + Math.sin(this.time * 0.28) * 0.015;
+      const horizonScale =
+        1 + Math.sin(this.time * 0.28) * 0.015 + darkening * 0.08;
 
-      this.eventHorizon.scale.setScalar(horizonScale);
+      this.eventHorizon.scale
+        .copy(this.eventHorizonJourneyScale)
+        .multiplyScalar(horizonScale);
     }
 
     this.eventHorizon.material.opacity =
-      0.16 + Math.sin(this.time * 0.22) * 0.02;
+      THREE.MathUtils.lerp(
+        0.16 + Math.sin(this.time * 0.22) * 0.02,
+        0.82,
+        darkening,
+      );
 
     // ------------------------------------------------
     // ACCRETION RING
     // ------------------------------------------------
 
     if (this.accretionRing) {
-      this.accretionRing.rotation.z += delta * 0.45;
+      this.accretionRing.rotation.z += delta * (0.45 + concentration * 1.15);
 
       this.accretionRing.position.x = Math.sin(this.time * 0.18) * 0.003;
 
@@ -672,10 +863,17 @@ export default class EngineCore {
         THREE.MathUtils.degToRad(18) + Math.cos(this.time * 0.18) * 0.015;
 
       this.accretionRing.material.emissiveIntensity =
-        0.12 + Math.sin(this.time * 0.35) * 0.02 + (this.ringPulse || 0) * 0.25;
+        (0.12 +
+          Math.sin(this.time * 0.35) * 0.02 +
+          (this.ringPulse || 0) * 0.25 +
+          earlyReaction * 0.12) *
+        (1 - darkening * 0.72);
 
       const ringScale =
-        1 + Math.sin(this.time * 0.45) * 0.008 + (this.ringPulse || 0) * 0.05;
+        1 +
+        Math.sin(this.time * 0.45) * 0.008 +
+        (this.ringPulse || 0) * 0.05 -
+        darkening * 0.1;
 
       this.accretionRing.scale.setScalar(ringScale);
 
@@ -689,6 +887,11 @@ export default class EngineCore {
 
       if (this.orbitParticles) {
         this.orbitParticles.forEach((particle) => {
+          if (this.journeyProgress > 0) {
+            this.updateJourneyDebris(particle, delta);
+            return;
+          }
+
           if (!particle.visible) {
             particle.userData.respawnTimer -= delta;
 
@@ -723,14 +926,13 @@ export default class EngineCore {
             THREE.MathUtils.clamp(radiusFactor, 0, 1),
           ) * particle.userData.speed;
 
-          particle.userData.angle +=
-            delta * orbitalSpeed * (1 + this.journeyCollapse * 7);
+          particle.userData.angle += delta * orbitalSpeed;
 
           particle.rotation.x += delta * particle.userData.tumble.x;
           particle.rotation.y += delta * particle.userData.tumble.y;
           particle.rotation.z += delta * particle.userData.tumble.z;
 
-          if (particle.userData.consume && this.journeyCollapse === 0) {
+          if (particle.userData.consume) {
             const gravity = THREE.MathUtils.inverseLerp(
               0.95,
               0.18,
@@ -762,26 +964,7 @@ export default class EngineCore {
           const wobble =
             Math.sin(this.time * 0.35 + particle.userData.drift * 2.0) * 0.012;
 
-          const captureVariation =
-            (Math.sin(particle.userData.drift * 12.9898) + 1) * 0.5;
-          const captureDelay = captureVariation * 0.2;
-          const collapse = THREE.MathUtils.smoothstep(
-            THREE.MathUtils.clamp(
-              (this.journeyCollapse - captureDelay) / (0.82 - captureDelay),
-              0,
-              1,
-            ),
-            0,
-            1,
-          );
-          const inwardProgress = Math.pow(collapse, 1.55);
-          const spiralDirection = particle.userData.concentrated ? 1 : -1;
-          const spiralTurns = 2.4 + captureVariation * 3.2;
-          const displayedRadius = animatedRadius * (1 - inwardProgress);
-          const orbitAngle =
-            particle.userData.angle +
-            wobble +
-            spiralDirection * collapse * collapse * spiralTurns;
+          const orbitAngle = particle.userData.angle + wobble;
 
           const cosNode = Math.cos(particle.userData.ascendingNode);
           const sinNode = Math.sin(particle.userData.ascendingNode);
@@ -802,14 +985,14 @@ export default class EngineCore {
 
           particle.position.set(
             (cosNode * cosAngle - sinNode * sinAngle * cosInclination) *
-              displayedRadius,
+              animatedRadius,
 
-            (particle.userData.height + verticalDrift) *
-              (1 - inwardProgress) +
-              sinAngle * sinInclination * displayedRadius,
+            particle.userData.height +
+              sinAngle * sinInclination * animatedRadius +
+              verticalDrift,
 
             (sinNode * cosAngle + cosNode * sinAngle * cosInclination) *
-              displayedRadius,
+              animatedRadius,
           );
 
           const fade = THREE.MathUtils.smoothstep(
@@ -818,19 +1001,13 @@ export default class EngineCore {
             0.45,
           );
 
-          const collapseFade =
-            1 - THREE.MathUtils.smoothstep(inwardProgress, 0.88, 1);
-
-          particle.material.opacity = fade * collapseFade;
+          particle.material.opacity = fade;
         });
       }
     }
   }
   setTransitEnergy(value) {
     this.transitEnergy = value;
-  }
-  setJourneyCollapse(value) {
-    this.journeyCollapse = THREE.MathUtils.clamp(value, 0, 1);
   }
   get object() {
     return this.group;
