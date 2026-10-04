@@ -642,7 +642,7 @@ export class SpaceTheme {
     this.plasmaBlob.update(audio, this.time);
 
     if (this.plasmaBlob?._mesh) {
-      this.plasmaBlob._mesh.scale.setScalar(this.plasmaBlob.cfg.scale * breath);
+      this.plasmaBlob._mesh.scale.multiplyScalar(breath);
     }
 
     // ------------------------------------------------

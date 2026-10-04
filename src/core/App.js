@@ -34,6 +34,9 @@ import CameraDirector, {
 import JourneyDirector from "../systems/cinematic/JourneyDirector.js";
 import TransitSystem from "../systems/transit/TransitSystem.js";
 
+// Bump when the intended Space Plasma baseline changes.
+const SPACE_PLASMA_GUI_BASELINE = "blob-pass-2";
+
 export class App {
   constructor() {
     // ------------------------------------------------
@@ -905,6 +908,11 @@ export class App {
   saveGUISettings() {
     const data = this.gui.save();
 
+    // Keep manual Save/Load intact; distinguish current tuning from legacy saves.
+    if (this.themeManager.activeThemeName === "space") {
+      data.plasmaBaselineVersion = SPACE_PLASMA_GUI_BASELINE;
+    }
+
     const key = `hero-core-gui-${this.themeManager.activeThemeName}`;
 
     localStorage.setItem(key, JSON.stringify(data));
@@ -927,6 +935,14 @@ export class App {
 
     try {
       const data = JSON.parse(raw);
+
+      // Only obsolete Plasma tuning is excluded; current saves restore normally.
+      if (
+        this.themeManager.activeThemeName === "space" &&
+        data.plasmaBaselineVersion !== SPACE_PLASMA_GUI_BASELINE
+      ) {
+        delete data.folders?.["🫧 Plasma"];
+      }
 
       this.gui.load(data);
 

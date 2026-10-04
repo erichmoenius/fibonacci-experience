@@ -12,6 +12,9 @@ uniform float uN1Freq;
 uniform float uN2Amp;
 uniform float uN2Freq;
 uniform float uBass;
+uniform float uMid;
+uniform float uHigh;
+uniform float uEnergy;
 uniform float uKickDecay;
 varying vec3 vNormal;
 varying vec3 vWorldPos;
@@ -39,7 +42,8 @@ float noise3D(vec3 p){
 
 float fbm1(vec3 p){
   float v=0.0, a=0.5, f=1.0;
-  for(int i=0;i<5;i++){ v+=a*noise3D(p*f); f*=2.0; a*=0.5; }
+  // Keep broad motion; soften the higher-frequency deformation detail.
+  for(int i=0;i<3;i++){ v+=a*noise3D(p*f); f*=2.0; a*=0.35; }
   return v*2.0-1.0;
 }
 
@@ -52,22 +56,28 @@ float fbm2(vec3 p){
   return v*2.0-1.0;
 }
 
-vec3 displace(vec3 nd, float t, float a1, float a2){
-  return nd*(1.0+clamp(
-    fbm1(nd*uN1Freq+t*0.5)*a1+fbm2(nd*uN2Freq+t*0.3)*a2,
-    -1.0,1.0)*0.68);
+float deformation(vec3 nd, float t){
+  float n1 = fbm1(nd*uN1Freq+t*0.5);
+  float n2 = fbm2(nd*uN2Freq+t*0.3);
+  // Audio moves broad surface regions; do not amplify fine noise with bass.
+  float swell = noise3D(nd*uN1Freq*0.65+t*0.18)*2.0-1.0;
+  float organic = noise3D(nd*uN1Freq+t*0.35+vec3(17.4,31.1,23.7))*2.0-1.0;
+  return clamp(n1*uN1Amp+n2*uN2Amp
+    +swell*(uBass*0.55+uKickDecay*0.20)
+    +organic*(uMid*0.16+uEnergy*0.10+uHigh*0.015), -1.0, 1.0);
 }
 
+vec3 displace(vec3 nd, float t){
+  // Match the visible surface when estimating its normal.
+  return nd*(1.5+deformation(nd,t)*0.68);
+}
 void main(){
   float t = uTime*uSpeed;
   vec3 nd = normalize(position);
 
-  float a1 = uN1Amp+(uBass+uKickDecay*0.4)*0.5;
-  float a2 = uN2Amp+(uBass+uKickDecay*0.4)*0.25;
-
   float n1 = fbm1(nd*uN1Freq+t*0.5);
   float n2 = fbm2(nd*uN2Freq+t*0.3);
-  float combined = clamp(n1*a1+n2*a2,-1.0,1.0);
+  float combined = deformation(nd,t);
 
   vN1      = clamp(n1*0.5+0.5, 0.0,1.0);
   vN2      = clamp(n2*0.5+0.5, 0.0,1.0);
@@ -81,8 +91,8 @@ void main(){
   vec3 t2=normalize(cross(nd,t1));
 
   vec3 rn=normalize(cross(
-    displace(normalize(nd+t1*eps),t,a1,a2)-displace(normalize(nd-t1*eps),t,a1,a2),
-    displace(normalize(nd+t2*eps),t,a1,a2)-displace(normalize(nd-t2*eps),t,a1,a2)
+    displace(normalize(nd+t1*eps),t)-displace(normalize(nd-t1*eps),t),
+    displace(normalize(nd+t2*eps),t)-displace(normalize(nd-t2*eps),t)
   ));
   if(dot(rn,nd)<0.0) rn=-rn;
 
@@ -286,7 +296,7 @@ export class PlasmaBlob {
     this.cfg = {
       scale: 1.0,
       opacity: 1.0,
-      auraOpacity: 0.35,
+      auraOpacity: 0,
       n1Amp: 0.6,
       n1Freq: 1.8,
       n2Amp: 0.35,
@@ -350,6 +360,7 @@ export class PlasmaBlob {
       blending: THREE.AdditiveBlending,
     });
     this._aura = new THREE.Mesh(this._auraGeo, this._auraMat);
+    this._aura.visible = false;
     this._scene.add(this._aura);
   }
 
@@ -364,7 +375,7 @@ export class PlasmaBlob {
       case "nebula":
         this.cfg.speed = 0.18;
         this.cfg.n1Amp = 0.48;
-        this.cfg.n2Amp = 0.3;
+        this.cfg.n2Amp = 0.08;
         break;
       case "crystalline":
         this.cfg.speed = 0.03;
@@ -393,7 +404,7 @@ export class PlasmaBlob {
   enable() {
     this._enabled = true;
     this._mesh.visible = true;
-    this._aura.visible = true;
+    this._aura.visible = false;
     return this;
   }
 
@@ -443,7 +454,7 @@ export class PlasmaBlob {
     this._aura.rotation.y -= 0.0008;
     this._aura.rotation.x += 0.0004;
 
-    const pulse = 1 + bass * 0.18 + energy * 0.12 + this._kickDecay * 0.18;
+    const pulse = 1 + bass * 0.09 + energy * 0.06 + this._kickDecay * 0.09;
 
     this._mesh.scale.setScalar(cfg.scale * pulse);
 
@@ -458,7 +469,6 @@ export class PlasmaBlob {
   addGUI(folder) {
     const c = this.cfg;
     folder.add(c, "opacity", 0, 1, 0.01).name("Opacity");
-    folder.add(c, "auraOpacity", 0, 1, 0.01).name("Aura");
     folder.add(c, "scale", 0.2, 8, 0.01).name("Size");
 
     const fN = folder.addFolder("Noise");
