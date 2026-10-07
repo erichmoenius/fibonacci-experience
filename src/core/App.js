@@ -791,18 +791,9 @@ export class App {
           this.disarmArmedInvitation();
         }
 
-        if (e.code === "KeyG") {
-          console.log("G pressed");
-
-          const pose =
-            this.themeManager.activeTheme?.engine?.getInspectionPose();
-
-          console.log("Inspection pose:", pose);
-
-          if (pose) {
-            this.cameraDirector.flightStyle = "gravity";
-            this.cameraDirector.travel(pose);
-          }
+        if (e.code === "KeyG" && !e.repeat) {
+          const editing = e.target?.closest?.("input, textarea, select, [contenteditable]");
+          if (!editing) this.gui.show(this.gui._hidden);
         }
       },
     );

@@ -19,7 +19,7 @@ export class EnvironmentTheme extends DevelopmentTheme {
   constructor(container, gui) {
     super(container, {
       name: "EnvironmentTheme",
-      label: "4 - ENVIRONMENT",
+      label: "4 - OUR WORLD",
       color: 0x45d483,
     });
     this.flight = new SphericalTravellerFlight({

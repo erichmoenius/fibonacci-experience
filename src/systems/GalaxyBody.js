@@ -177,6 +177,21 @@ export class GalaxyBody {
       this.group.add(surface);
       this.materials.push(material);
     }
+
+    // Reuse the middle body's world-space density as foreground coverage.
+    // Extinction is separate from its faint additive emission: dense arms block
+    // background light, while dust gaps, the rim and close approach stay soft.
+    this.extinctionMaterial = this.materials[1].clone();
+    this.extinctionMaterial.fragmentShader = fragmentShader.replace(
+      "gl_FragColor = vec4(color, uOpacity * density * closeFade);",
+      "gl_FragColor = vec4(vec3(0.0), smoothstep(0.02, 0.25, density) * closeFade);",
+    );
+    this.extinctionMaterial.blending = THREE.NormalBlending;
+    this.extinctionMaterial.forceSinglePass = true;
+    this.extinctionSurface = new THREE.Mesh(this.geometry, this.extinctionMaterial);
+    this.extinctionSurface.name = "SpiralBackgroundExtinction";
+    this.group.add(this.extinctionSurface);
+    this.materials.push(this.extinctionMaterial);
   }
 
   update(rotationY) {
