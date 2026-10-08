@@ -958,6 +958,10 @@ export default class CameraDirector {
     }
 
     if (this.mode === CameraMode.EXPLORE) {
+      // Theme-owned opt-in: keep a subject framed during orbit, then retain
+      // the resulting heading on release. Existing themes have no hook.
+      const orbitTarget = this.exploreTravel?.getOrbitLookTarget?.();
+      if (orbitTarget) this.exploreForward.subVectors(orbitTarget, this.position).normalize();
       this.yawTarget
         .copy(this.exploreForward)
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw)

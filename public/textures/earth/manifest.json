@@ -1,0 +1,87 @@
+[
+  {
+    "file": "day-4k.jpg",
+    "source": "https://www.solarsystemscope.com/textures/download/8k_earth_daymap.jpg",
+    "author": "Solar System Scope / INOVE",
+    "license": "CC BY 4.0",
+    "sourceDimensions": [
+      8192,
+      4096
+    ],
+    "dimensions": [
+      4096,
+      2048
+    ],
+    "modifications": "Lanczos downsample; RGB; JPEG quality 95 without chroma subsampling for color/clouds, lossless PNG for data maps",
+    "bytes": 1937563,
+    "sha256": "e3aa7c3903242e70f311163542c1eab48f1f645c5eb9b3e6a1279722e8898f51"
+  },
+  {
+    "file": "night-4k.jpg",
+    "source": "https://www.solarsystemscope.com/textures/download/8k_earth_nightmap.jpg",
+    "author": "Solar System Scope / INOVE",
+    "license": "CC BY 4.0",
+    "sourceDimensions": [
+      8192,
+      4096
+    ],
+    "dimensions": [
+      4096,
+      2048
+    ],
+    "modifications": "Lanczos downsample; RGB; JPEG quality 95 without chroma subsampling for color/clouds, lossless PNG for data maps",
+    "bytes": 1279736,
+    "sha256": "22fd994e91a59f19d6cc1ef9efd79cfa340a725bcc516d71bbf7e1a223b323d0"
+  },
+  {
+    "file": "clouds-4k.jpg",
+    "source": "https://www.solarsystemscope.com/textures/download/8k_earth_clouds.jpg",
+    "author": "Solar System Scope / INOVE",
+    "license": "CC BY 4.0",
+    "sourceDimensions": [
+      8192,
+      4096
+    ],
+    "dimensions": [
+      4096,
+      2048
+    ],
+    "modifications": "Lanczos downsample; RGB; JPEG quality 95 without chroma subsampling for color/clouds, lossless PNG for data maps",
+    "bytes": 4122362,
+    "sha256": "33f66d4a3aa87e1300ae0c3bcf44787092810fb5ff5e82e37c6c5f825a60a476"
+  },
+  {
+    "file": "normal-4k.png",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/f/fb/Solarsystemscope_texture_8k_earth_normal_map.tif",
+    "author": "Solar System Scope / INOVE",
+    "license": "CC BY 4.0",
+    "sourceDimensions": [
+      8192,
+      4096
+    ],
+    "dimensions": [
+      4096,
+      2048
+    ],
+    "modifications": "Lanczos downsample; RGB; JPEG quality 95 without chroma subsampling for color/clouds, lossless PNG for data maps",
+    "bytes": 2099243,
+    "sha256": "d91398fd511251b618ef97b5810f1edb1849ad9baa8d04f4f6bec3915d08ec0d"
+  },
+  {
+    "file": "ocean-4k.png",
+    "source": "https://www.solarsystemscope.com/textures/download/8k_earth_specular_map.tif",
+    "author": "Solar System Scope / INOVE",
+    "license": "CC BY 4.0",
+    "sourceDimensions": [
+      8192,
+      4096
+    ],
+    "dimensions": [
+      4096,
+      2048
+    ],
+    "modifications": "Lanczos downsample; RGB; JPEG quality 95 without chroma subsampling for color/clouds, lossless PNG for data maps",
+    "bytes": 1043241,
+    "sha256": "9bdd2df80790dd9d810668fc896cc317b98674f50f9d4753e8e1312df1a65356"
+  }
+]
