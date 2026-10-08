@@ -81,14 +81,17 @@ export class App {
     this.journeyDirector = new JourneyDirector(this.cameraDirector);
 
     this.journeyDirector.onApproach = (coreObject) => {
+      if (this.journeyDirector.getJourney()?.id === "planetary-environment") return;
       this.cameraDirector.beginCoreApproach(coreObject);
     };
 
     this.journeyDirector.onHorizon = (coreObject) => {
+      if (this.journeyDirector.getJourney()?.id === "planetary-environment") return;
       this.cameraDirector.beginCoreHorizon(coreObject);
     };
 
     this.journeyDirector.onSingularity = (crossing) => {
+      if (this.journeyDirector.getJourney()?.id === "planetary-environment") return;
       this.cameraDirector.beginCrossing(crossing);
     };
 
@@ -101,6 +104,7 @@ export class App {
     };
 
     this.journeyDirector.onTransit = (type) => {
+      if (this.journeyDirector.getJourney()?.id === "planetary-environment") return;
       console.log("🌌 Transit requested:", type);
 
       this.transitSystem.start(type);
@@ -144,6 +148,10 @@ export class App {
     };
 
     this.journeyDirector.onVoidStart = () => {
+      if (this.journeyDirector.getJourney()?.id === "planetary-environment") {
+        this.journeyDirector.getJourney().maskHandoff();
+        return;
+      }
       console.log("🌑 VOID");
 
       this.renderer.fadeOut(1);
@@ -174,6 +182,7 @@ export class App {
       const earthJourney = this.journeyDirector.getJourney()?.id === "planetary-environment"
         ? this.journeyDirector.getJourney() : null;
       if (earthJourney) {
+        earthJourney.maskHandoff();
         // Release source-object camera references before disposing Planetary.
         this.cameraDirector.finishTravel();
         this.cameraDirector.beginJourney(earthJourney);
@@ -201,10 +210,12 @@ export class App {
       const pose = this.themeManager.activeTheme?.getHomePose();
 
       if (pose) {
+        // The destination jump is fully masked; reveal only its existing home.
+        earthJourney?.setArrivalPose(pose, this.themeManager.activeTheme.earth?.ready);
         this.cameraDirector.travel(pose);
       }
 
-      this.renderer.fadeIn(3);
+      if (!earthJourney) this.renderer.fadeIn(3);
     };
 
     console.log("🎬 Cinematic system initialized");
@@ -778,6 +789,9 @@ export class App {
     this.disarmArmedInvitation();
 
     journeyGateway.target?.resetInspection?.();
+    if (journey.id === "planetary-environment") {
+      journey.prepareDescent(this.cameraDirector, journeyGateway.target, this.renderer.fadeOverlay);
+    }
     this.cameraDirector.beginJourney(journey);
 
     this.journeyDirector.begin(
@@ -1191,6 +1205,9 @@ export class App {
       ? this.journeyDirector.getScaledDelta(0.016)
       : 0.016;
 
+    const descentTheme = this.journeyDirector.getJourney()?.id === "planetary-environment"
+      && this.themeManager.activeTheme?.updateBeforeGatewayDetection ? this.themeManager.activeTheme : null;
+    if (descentTheme) this.themeManager.update(state);
     this.cameraDirector.update(journeyCameraDelta);
 
     this.exploreDirector.update(0.016);
@@ -1198,7 +1215,7 @@ export class App {
     // Moving planetary targets must advance once before proximity detection.
     // Other themes keep their established update order.
     const gatewayTheme = this.themeManager.activeTheme;
-    if (gatewayTheme?.updateBeforeGatewayDetection) this.themeManager.update(state);
+    if (gatewayTheme?.updateBeforeGatewayDetection && gatewayTheme !== descentTheme) this.themeManager.update(state);
     this.journeyDirector.update(this.cameraDirector.getPosition());
 
     this.transitSystem.update(0.016);

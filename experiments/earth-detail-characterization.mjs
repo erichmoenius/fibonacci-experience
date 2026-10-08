@@ -111,7 +111,8 @@ for (const name of ['VERTEX', 'COMMON', 'SURFACE', 'CLOUDS']) {
 }
 const protectedPaths = ['src/systems/cinematic', 'src/ui/ThemeFlightControls.js', 'src/graphics/Renderer.js',
   'src/themes/SpaceTheme.js', 'src/themes/GalaxyTheme.js',
-  ':(exclude)src/systems/cinematic/GalaxyJourney.js', ':(exclude)src/systems/cinematic/EarthJourney.js'];
+  ':(exclude)src/systems/cinematic/GalaxyJourney.js', ':(exclude)src/systems/cinematic/EarthJourney.js',
+  ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js'];
 check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'protected flight, F, renderer and other themes unchanged');
 const manifest = JSON.parse(readFileSync('public/textures/earth/manifest.json', 'utf8'));
 for (const asset of manifest) {

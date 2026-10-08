@@ -42,7 +42,12 @@ function callback(app, name) {
 const originalLog = console.log, originalWarn = console.warn, originalTrace = console.trace;
 console.log = console.warn = console.trace = () => {};
 const eventSurface = { addEventListener() {}, removeEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) };
-globalThis.document = { ...eventSurface };
+function element() {
+  return { style: { background: "black", transition: "opacity 1s linear", opacity: "0" }, children: [],
+    appendChild(child) { this.children.push(child); child.parent = this; },
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter(c => c !== this); } };
+}
+globalThis.document = { ...eventSurface, createElement: element };
 globalThis.window = { ...eventSurface, devicePixelRatio: 1, innerWidth: 1000, innerHeight: 1000 };
 const storage = new Map(); let writes = 0;
 globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem() { writes++; throw new Error('No writes allowed'); } };
@@ -69,6 +74,7 @@ function fixture() {
     acceptancePointer: new THREE.Vector2(), acceptanceRaycaster: new THREE.Raycaster(), acceptanceClick: {},
     isGUIEvent: e => Boolean(e.gui), showNotification() {}, isBoosting: true,
   };
+  app.renderer.fadeOverlay = element();
   app.look = { scale: 1 }; app.gui.addFolder("LOOK").add(app.look, "scale").name("Scale");
   app.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
   app.cameraDirector = new CameraDirector(app.camera, eventSurface);
@@ -99,8 +105,12 @@ check(app.acceptReadyProximityGateway(click), 'rendered Earth hit starts Journey
 const journey = app.journeyDirector.getJourney();
 check(journey.id === 'planetary-environment' && !app.cameraDirector.freeFlight.active && app.cameraDirector.mode === CameraMode.TRAVEL, 'unique journey takes camera ownership');
 check(!app.acceptReadyProximityGateway(click) && app.journeyDirector.getJourney() === journey, 'duplicate start rejected');
-let activations = 0; const activate = app.themeManager.activate.bind(app.themeManager);
-app.themeManager.activate = name => { activations++; activate(name); };
+let activations = 0; let maskedActivation = false; const activate = app.themeManager.activate.bind(app.themeManager);
+app.themeManager.activate = name => {
+  activations++;
+  maskedActivation = journey.atmosphere.whiteout === 1 && app.renderer.fadeOverlay.children[2].style.opacity === "1";
+  activate(name);
+};
 function tick(app, delta) { app.themeManager.update({ time: (app.time = (app.time ?? 0) + delta) }); app.cameraDirector.update(delta); app.journeyDirector.update(app.cameraDirector.position, delta); }
 const phases = ['APPROACH', 'HORIZON', 'SINGULARITY', 'WORMHOLE', 'VOID', 'BIRTH'];
 for (const [index, duration] of [2, 3, 3, 4, 4, 1].entries()) {
@@ -109,11 +119,16 @@ for (const [index, duration] of [2, 3, 3, 4, 4, 1].entries()) {
   check(journey.phase === phases[index], `phase ${phases[index]}`);
   check(app.themeManager.activeThemeName === (index < 5 ? 'planetary' : 'environment'), 'destination activates only at BIRTH');
 }
-check(activations === 1 && app.journeyDirector.activeJourneyDestinationTheme === 'environment', 'single registered destination activation');
+check(activations === 1 && maskedActivation && app.journeyDirector.activeJourneyDestinationTheme === 'environment', 'single registered destination activation');
 check(!gateway.enabled && gateway.target === null && app.journeyDirector.gateways.length === 0 && !app.activeGateway && !app.armedGateway, 'source gateway released');
 check(!app.cameraDirector.approachCoreObject && !app.cameraDirector.crossingCoreObject && !app.journeyDirector.activeJourneyTarget, 'source camera/director references released');
 const home = app.themeManager.activeTheme.getHomePose();
 check(app.cameraDirector.flightSystem.flight.targetPose.position.equals(home.position), 'existing OUR WORLD home is travel destination');
+tick(app, 0.01);
+check(app.cameraDirector.position.equals(home.position) && journey.atmosphere.whiteout > 0.999,
+  'masked home camera is established before destination reveal');
+check(!app.transitSystem.active && !app.renderer.fades.some(([type]) => type === 'out'),
+  'Journey 3 never starts wormhole transit or black fade');
 check(app.themeManager.activeTheme.flight.rmbMaxSpeed === 2.5, 'saved destination F restored');
 await Promise.resolve(); await Promise.resolve();
 check(app.themeManager.activeTheme.earth.surfaceDetail === 'high', 'saved destination G requests existing High mode');
@@ -121,6 +136,8 @@ for (let i = 0; i < 310 && app.journeyDirector.isActive(); i++) tick(app, 0.01);
 check(journey.completed && !app.journeyDirector.isActive() && !app.cameraDirector.journey && app.cameraDirector.freeFlight.active && app.cameraDirector.mode === CameraMode.EXPLORE, 'completion releases journey to normal exploration');
 check(app.cameraDirector.position.distanceTo(home.position) < 1e-8 && !app.transitSystem.active, 'home arrival and transit cleanup');
 check(app.cameraDirector.exploreTravel === app.themeManager.activeTheme.flight, 'normal Earth flight adapter restored');
+check(app.renderer.fadeOverlay.children.length === 0 && app.renderer.fadeOverlay.style.background === 'black'
+  && app.renderer.fadeOverlay.style.opacity === '0', 'completion clears atmospheric layers and restores curtain');
 check(writes === 0 && JSON.stringify([...storage]) === presetBefore, 'destination transition never writes presets');
 
 // Replay the unchanged Journey 2 phase logic against the protected version.
@@ -132,11 +149,13 @@ old.onEvent = e => oldEvents.push(e); current.onEvent = e => currentEvents.push(
 for (let i = 0; i < 2100; i++) { old.update(0.01); current.update(0.01); check(old.phase === current.phase && old.phaseTime === current.phaseTime && old.completed === current.completed, 'Journey 2 timing unchanged'); }
 check(current.id === old.id && JSON.stringify(oldEvents) === JSON.stringify(currentEvents), 'Journey 2 identity and events unchanged');
 
-for (const cancelAfterBirth of [false, true]) {
+for (const cancelPhase of ['APPROACH', 'WORMHOLE', 'BIRTH']) {
+  const cancelAfterBirth = cancelPhase === 'BIRTH';
   const a = fixture(); a.acceptReadyProximityGateway(click); const active = a.journeyDirector.getJourney();
   if (cancelAfterBirth) for (let i = 0; i < 1800 && a.themeManager.activeThemeName !== 'environment'; i++) tick(a, 0.01);
-  else { for (let i = 0; i < 1700 && active.phase !== 'VOID'; i++) tick(a, 0.01); }
+  else { for (let i = 0; i < 1700 && active.phase !== cancelPhase; i++) tick(a, 0.01); }
   a.look.scale = 3.5;
+  a.cameraDirector.freeFlight.pointer.active = true; a.cameraDirector.freeFlight.pointer.rmbActive = true;
   let keydown; window.addEventListener = (name, listener) => { if (name === 'keydown') keydown = listener; };
   method('setupThemeSwitching').call(a); keydown({ code: 'Escape', repeat: false });
   check(active.cancelled && !a.journeyDirector.isActive() && a.cameraDirector.mode === CameraMode.RETURN && !a.transitSystem.active, 'ESC cancels and returns safely');
@@ -145,7 +164,10 @@ for (const cancelAfterBirth of [false, true]) {
   check(a.themeManager.activeThemeName === (cancelAfterBirth ? 'environment' : 'planetary'), 'ESC stays in current active theme');
   check(cancelAfterBirth ? a.themeManager.activeTheme.flight.rmbMaxSpeed === 2.5 : a.themeManager.activeTheme.flight.thrustMaxSpeed === 7, 'ESC restores active saved F');
   check(cancelAfterBirth ? a.themeManager.activeTheme.earth.surfaceDetail === "high" : a.look.scale === 2.5, "ESC restores active saved G independently");
-  check(a.renderer.fades.some(([type, duration]) => type === 'in' && duration === 0.3), 'ESC clears black fade');
+  check(a.renderer.fades.some(([type, duration]) => type === 'in' && duration === 0.3), 'ESC clears curtain');
+  check(!a.cameraDirector.freeFlight.pointer.active && !a.cameraDirector.freeFlight.pointer.rmbActive, "ESC resets both mouse buttons");
+  check(active.atmosphere.cleared && active.target === null && a.renderer.fadeOverlay.children.length === 0
+    && a.renderer.fadeOverlay.style.opacity === '0', 'ESC clears all atmospheric effects and references');
   a.themeManager.activeTheme.destroy();
 }
 const unavailable = fixture(); unavailable.themeManager.themes.delete('environment');

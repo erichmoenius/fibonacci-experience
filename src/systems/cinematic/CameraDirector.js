@@ -614,6 +614,18 @@ export default class CameraDirector {
   }
 
   updateTravel(delta) {
+    // Opt-in Journey 3 pose. CameraDirector remains the sole camera writer.
+    const atmosphericPose = this.journey?.getAtmosphericPose?.();
+    if (atmosphericPose) {
+      this.currentPose.position.copy(atmosphericPose.position);
+      this.currentPose.lookTarget.copy(atmosphericPose.lookTarget);
+      this.position.copy(this.currentPose.position);
+      this.currentTarget.copy(this.currentPose.lookTarget);
+      this.lookTarget.copy(this.currentTarget);
+      this.targetPosition.copy(this.position);
+      this.applyComputedPosition();
+      return;
+    }
     if (this.approachActive) {
       this.approachElapsed = Math.min(
         this.approachElapsed + delta,

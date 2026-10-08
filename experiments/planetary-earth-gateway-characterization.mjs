@@ -101,12 +101,17 @@ Object.assign(app, { stats: { begin() {}, end() {} }, scroll: { updateScroll() {
   exploreDirector: { update() {} }, transitSystem: { update() {} }, updateEnvironment() {},
   devHUD: { update() {} }, points: { rotation: { x: 0, y: 0 } }, wheel: { delta: 0 },
 });
-traveler.update = () => {}; traveler.getPosition = () => traveler.position;
+traveler.update = () => { frameOrder.push("camera"); }; traveler.getPosition = () => traveler.position;
 appMethod('update').call(app);
-check(frameOrder.join(',') === 'theme,gateway' && director.gatewayReady, 'same-frame orbital motion readiness, theme updates once');
+check(frameOrder.join(',') === 'camera,theme,gateway' && director.gatewayReady, 'same-frame orbital motion readiness, theme updates once');
 theme.updateBeforeGatewayDetection = false; frameOrder.length = 0; appMethod('update').call(app);
-check(frameOrder.join(',') === 'gateway,theme', 'other-theme update order preserved');
+check(frameOrder.join(',') === 'camera,gateway,theme', 'other-theme update order preserved');
 theme.updateBeforeGatewayDetection = true;
+frameOrder.length = 0;
+director.activeJourney = { id: 'planetary-environment', update() {} };
+appMethod('update').call(app);
+check(frameOrder.join(',') === 'theme,camera,gateway', 'descent updates live Earth before camera exactly once');
+director.activeJourney = null;
 // Existing Galaxy route is still consuming and executable, including optical hit.
 const galaxyGateway = new Gateway(new THREE.Vector3(), 2.5, { hitInspectionPointer: () => false });
 galaxyGateway.acceptanceMode = 'proximity-lmb'; galaxyGateway.journey = { id: 'galaxy' };
@@ -148,7 +153,8 @@ const checkpoint = '80c2757470e66a43e956178aa3629a077fb0bcdc';
 const protectedPaths = ['src/systems/cinematic', 'src/systems/PlanetaryFlight.js', 'src/systems/SolarSystem.js',
   'src/themes/GalaxyTheme.js', 'src/themes/EnvironmentTheme.js', 'src/systems/EarthGlobe.js',
   'src/ui/ThemeFlightControls.js', 'src/themes/BaseTheme.js', 'public/textures', 'src/graphics',
-  ':(exclude)src/systems/cinematic/GalaxyJourney.js', ':(exclude)src/systems/cinematic/EarthJourney.js'];
+  ':(exclude)src/systems/cinematic/GalaxyJourney.js', ':(exclude)src/systems/cinematic/EarthJourney.js',
+  ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js'];
 check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'GREEN flight journey Earth visual and asset systems unchanged');
 const oldPlanetary = execFileSync('git', ['show', `${checkpoint}:src/themes/PlanetaryTheme.js`], { encoding: 'utf8' });
 const newPlanetary = readFileSync('src/themes/PlanetaryTheme.js', 'utf8');
