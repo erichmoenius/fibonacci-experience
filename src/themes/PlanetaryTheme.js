@@ -5,7 +5,27 @@ import { PlanetaryFlight } from "../systems/PlanetaryFlight.js";
 import { PlanetaryMilkyWay } from "../systems/PlanetaryMilkyWay.js";
 import { PlanetaryDeepSpace } from "../systems/PlanetaryDeepSpace.js";
 
+// Theme-owned schema and unsaved session values. Defaults come from this theme's
+// existing flight instance, before any saved or runtime tuning is applied.
+const PLANETARY_FLIGHT_GUI = {
+  id: "planetary",
+  title: "Planetary Flight Control",
+  storageKey: "fibonacci-flight-v1-planetary",
+  runtime: null,
+  controls: [
+    ["thrustMaxSpeed", "Flight speed (units/s)", 0.35, 24, 0.05],
+    ["thrustAcceleration", "Acceleration response (1/s)", 0.5, 20, 0.1],
+    ["thrustBraking", "Damping / braking (1/s)", 0.5, 25, 0.1],
+    ["angularSensitivity", "X orbit sensitivity (rad/px)", 0.0002, 0.006, 0.0001],
+    ["verticalSensitivity", "Y orbit sensitivity (units/px)", 0.005, 0.15, 0.001],
+    ["strafeDisplacementSensitivity", "X strafe sensitivity (units/s/px)", 0.005, 0.2, 0.001],
+    ["thrustDisplacementSensitivity", "Z thrust sensitivity (units/s/px)", 0.005, 0.2, 0.001],
+  ],
+};
+
 export class PlanetaryTheme extends BaseTheme {
+  getFlightGUIConfig() { return PLANETARY_FLIGHT_GUI; }
+
   constructor(container, gui) {
     super(container, gui);
     this.milkyWay = new PlanetaryMilkyWay(container);

@@ -7,15 +7,35 @@ const ENVIRONMENT_FLIGHT = {
   maxSpeed: 2,
   orbitAngularSensitivity: 0.001,
   orbitElevationSensitivity: 0.001,
-  travelAcceleration: 5,
+  travelAcceleration: 7, // Planetary acceleration response; geometry stays theme-owned.
   travelBraking: 11,
-  thrustSensitivity: 0.03,
-  strafeSensitivity: 0.03,
+  thrustSensitivity: 2 * (0.08 / 12), // Same fraction of maxSpeed per pixel as Planetary.
+  strafeSensitivity: 2 * (0.08 / 12),
   deadZone: 3,
   stopEpsilon: 0.01,
 };
 
+// Theme-owned schema and unsaved session values. Defaults come from this theme's
+// existing flight instance, before any saved or runtime tuning is applied.
+const ENVIRONMENT_FLIGHT_GUI = {
+  id: "environment",
+  title: "Environment Flight Control",
+  storageKey: "fibonacci-flight-v1-environment",
+  runtime: null,
+  controls: [
+    ["rmbMaxSpeed", "Flight speed (units/s)", 0.35, 6, 0.05],
+    ["rmbAcceleration", "Acceleration response (1/s)", 0.5, 12, 0.1],
+    ["rmbBraking", "Damping / braking (1/s)", 0.5, 25, 0.1],
+    ["orbitAngularSensitivity", "X orbit sensitivity (rad/px)", 0.0002, 0.003, 0.0001],
+    ["orbitElevationSensitivity", "Y orbit sensitivity (rad/px)", 0.0002, 0.003, 0.0001],
+    ["rmbStrafeSensitivity", "X strafe sensitivity (units/s/px)", 0.005, 0.1, 0.001],
+    ["rmbThrustSensitivity", "Z thrust sensitivity (units/s/px)", 0.005, 0.1, 0.001],
+  ],
+};
+
 export class EnvironmentTheme extends DevelopmentTheme {
+  getFlightGUIConfig() { return ENVIRONMENT_FLIGHT_GUI; }
+
   constructor(container, gui) {
     super(container, {
       name: "EnvironmentTheme",

@@ -7,7 +7,27 @@ import { GalaxyPlasmaFilaments } from "../systems/GalaxyPlasmaFilaments.js";
 import Gateway from "../systems/cinematic/Gateway.js";
 import { GalaxyJourney } from "../systems/cinematic/GalaxyJourney.js";
 
+// Theme-owned schema and unsaved session values. Defaults come from this theme's
+// existing flight instance, before any saved or runtime tuning is applied.
+const GALAXY_FLIGHT_GUI = {
+  id: "galaxy",
+  title: "Galaxy Flight Control",
+  storageKey: "fibonacci-flight-v1-galaxy",
+  runtime: null,
+  controls: [
+    ["rmbMaxSpeed", "Flight speed (units/s)", 0.35, 12, 0.05],
+    ["rmbAcceleration", "Acceleration response (1/s)", 0.5, 20, 0.1],
+    ["rmbBraking", "Damping / braking (1/s)", 0.5, 25, 0.1],
+    ["orbitAngularSensitivity", "X orbit sensitivity (rad/px)", 0.0002, 0.006, 0.0001],
+    ["orbitElevationSensitivity", "Y orbit sensitivity (rad/px)", 0.0002, 0.006, 0.0001],
+    ["rmbStrafeSensitivity", "X strafe sensitivity (units/s/px)", 0.005, 0.2, 0.001],
+    ["rmbThrustSensitivity", "Z thrust sensitivity (units/s/px)", 0.005, 0.2, 0.001],
+  ],
+};
+
 export class GalaxyTheme extends BaseTheme {
+  getFlightGUIConfig() { return GALAXY_FLIGHT_GUI; }
+
   constructor(container, gui) {
     super(container, gui);
     this.galaxy = new GalaxySystem(container);
@@ -39,6 +59,10 @@ export class GalaxyTheme extends BaseTheme {
     this.plasmaFilaments.setParameter("scale", this.plasmaFilaments.parameters.scale);
     if (gui) this.plasmaFilaments.addGUI(gui);
     this.flight = new GalaxyFlight(this.galaxy.group);
+    // Match Planetary's fractional thrust/strafe response per pointer pixel,
+    // retaining this theme's speed cap, orbit reference and angular geometry.
+    this.flight.rmbThrustSensitivity = this.flight.rmbMaxSpeed * (0.08 / 12);
+    this.flight.rmbStrafeSensitivity = this.flight.rmbMaxSpeed * (0.08 / 12);
     this.gateways = [];
 
     const gateway = new Gateway(
@@ -77,6 +101,25 @@ export class GalaxyTheme extends BaseTheme {
     this.lastUpdateTime = time;
     this.galaxy.update(delta);
     this.plasmaFilaments.update(state.audio, delta);
+  }
+
+  handleInspectionWheel(event, camera, canvas) {
+    return this.galaxy.specialStar.handleInspectionWheel(event, camera, canvas);
+  }
+
+  resetInspection() {
+    this.galaxy.specialStar.resetInspection();
+  }
+
+  getFlightDiagnostics({ cameraDirector, journeyDirector }) {
+    const position = cameraDirector.position;
+    const gateway = this.gateways[0];
+    return {
+      "Traveller world position": [position.x, position.y, position.z]
+        .map((value) => value.toFixed(2)).join(", "),
+      "Distance to Special Star": gateway.resolvePosition().distanceTo(position).toFixed(2),
+      "Gateway READY": journeyDirector.gatewayReady,
+    };
   }
 
   getEnvironment() {

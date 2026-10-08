@@ -521,6 +521,7 @@ export class App {
       "pointermove",
 
       (e) => {
+        if (this.isGUIEvent(e)) return;
         this.trackAcceptanceMovement(e);
 
         const x = e.clientX / window.innerWidth;
@@ -562,8 +563,18 @@ export class App {
       "wheel",
 
       (e) => {
+        if (this.isGUIEvent(e)) return;
+        if (
+          this.cameraDirector.isMode(CameraMode.EXPLORE) &&
+          !this.journeyDirector.isActive() &&
+          this.themeManager.activeTheme?.handleInspectionWheel?.(e, this.camera, this.renderer.renderer.domElement)
+        ) {
+          e.preventDefault();
+          return;
+        }
         this.wheel.delta += e.deltaY * 0.001;
       },
+      { passive: false },
     );
 
     // Journey LMB temporarily disabled
@@ -585,7 +596,7 @@ export class App {
   }
 
   beginAcceptanceClick(event) {
-    if (event.button !== 0) return;
+    if (this.isGUIEvent(event) || event.button !== 0) return;
 
     this.acceptanceClick.pointerId = event.pointerId;
     this.acceptanceClick.startX = event.clientX;
@@ -594,6 +605,7 @@ export class App {
   }
 
   acceptReadyProximityGateway(event) {
+    if (this.isGUIEvent(event)) return false;
     const journeyGateway = this.activeGateway;
 
     if (
@@ -605,6 +617,12 @@ export class App {
       this.journeyDirector.isActive()
     )
       return false;
+
+    // Galaxy inspection and intentional acceptance share the rendered hit target.
+    // Proximity remains a separate requirement; optical enlargement cannot arm a journey.
+    if (journeyGateway.target?.hitInspectionPointer && !journeyGateway.target.hitInspectionPointer(
+      event, this.camera, this.renderer.renderer.domElement,
+    )) return false;
 
     console.log("JOURNEY_ACCEPTED: gateway proximity");
 
@@ -630,6 +648,10 @@ export class App {
   }
 
   evaluateCoreAcceptance(event) {
+    if (this.isGUIEvent(event)) {
+      this.resetAcceptanceClick();
+      return;
+    }
     const click = this.acceptanceClick;
     const threshold = this.cameraDirector.freeFlight.dragThreshold;
     const theme = this.themeManager.activeTheme;
@@ -700,6 +722,7 @@ export class App {
 
     this.disarmArmedInvitation();
 
+    journeyGateway.target?.resetInspection?.();
     this.cameraDirector.beginJourney(journey);
 
     this.journeyDirector.begin(
@@ -730,6 +753,17 @@ export class App {
       "keydown",
 
       (e) => {
+        const editing = e.target?.closest?.("input, textarea, select, [contenteditable]");
+        if (e.code !== "Escape" && editing) return;
+        if ((e.code === "KeyF" || e.code === "KeyG") &&
+          (e.ctrlKey || e.metaKey || e.altKey)) return;
+        if (e.code === "KeyF") {
+          if (!e.repeat) {
+            const gui = this.themeManager.activeTheme?.createFlightGUI();
+            gui?.show(gui._hidden);
+          }
+          return;
+        }
         console.log("Key:", e.code);
         console.log("Camera mode:", this.cameraDirector.mode);
         console.log("Journey active:", this.journeyDirector.isActive());
@@ -785,6 +819,7 @@ export class App {
         // TEMP DEBUG
         if (e.code === "Escape") {
           const homePose = this.themeManager.activeTheme?.getHomePose?.();
+          this.themeManager.activeTheme?.resetInspection?.();
           this.cameraDirector.returnHome(homePose);
 
           this.journeyDirector.stop();
@@ -830,7 +865,23 @@ export class App {
   }
 
   applyActiveThemeFlight() {
-    this.cameraDirector.setExploreTravel(this.themeManager.activeTheme?.flight ?? null);
+    const visible = this.flightGUITheme?.flightControls?.gui
+      ? !this.flightGUITheme.flightControls.gui._hidden : false;
+    this.flightGUITheme?.disposeFlightGUI();
+    const theme = this.themeManager.activeTheme;
+    this.cameraDirector.setExploreTravel(theme?.flight ?? null);
+    if (!theme) return;
+    theme.initializeFlightControls({
+      cameraDirector: this.cameraDirector,
+      journeyDirector: this.journeyDirector,
+      notify: (text) => this.showNotification(text),
+    });
+    this.flightGUITheme = theme;
+    if (visible) theme.createFlightGUI().show();
+  }
+
+  isGUIEvent(event) {
+    return Boolean(event.target?.closest?.(".lil-gui"));
   }
 
   // ------------------------------------------------
@@ -1080,6 +1131,7 @@ export class App {
 
     this.themeManager.update(state);
 
+    this.themeManager.activeTheme?.updateFlightGUI();
     this.devHUD.update();
 
     // ------------------------------------------------
