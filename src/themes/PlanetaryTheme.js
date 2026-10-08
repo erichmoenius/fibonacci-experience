@@ -5,6 +5,12 @@ import { PlanetaryFlight } from "../systems/PlanetaryFlight.js";
 import { PlanetaryMilkyWay } from "../systems/PlanetaryMilkyWay.js";
 import { PlanetaryDeepSpace } from "../systems/PlanetaryDeepSpace.js";
 
+import { EarthJourney } from "../systems/cinematic/EarthJourney.js";
+import Gateway from "../systems/cinematic/Gateway.js";
+
+// Earth-only readiness threshold, in world units from its live center.
+export const PLANETARY_EARTH_GATEWAY_RADIUS = 10;
+
 // Theme-owned schema and unsaved session values. Defaults come from this theme's
 // existing flight instance, before any saved or runtime tuning is applied.
 const PLANETARY_FLIGHT_GUI = {
@@ -32,6 +38,18 @@ export class PlanetaryTheme extends BaseTheme {
     this.deepSpace = new PlanetaryDeepSpace(container);
     this.solarSystem = new SolarSystem(container);
     this.flight = new PlanetaryFlight(this.solarSystem);
+    this.updateBeforeGatewayDetection = true;
+    this.earthGateway = new Gateway(new THREE.Vector3(), PLANETARY_EARTH_GATEWAY_RADIUS, this.solarSystem.earth);
+    this.earthGateway.acceptanceMode = "proximity-lmb";
+    this.earthGateway.readinessOnly = false;
+    this.earthGateway.journey = new EarthJourney();
+    this.earthGateway.crossing = {
+      target: this.solarSystem.earth, direction: new THREE.Vector3(0, 0, 1), endpointDistance: 0.75,
+    };
+    this.earthGateway.intentCount = 0;
+    // Registered destination ID; proximity alone never starts this journey.
+    this.earthGateway.destinationTheme = "environment";
+    this.gateways = [this.earthGateway];
     this.lastUpdateTime = null;
     this.backgroundParticleField = container.parent?.children.find(
       (object) => object.isPoints && object.geometry?.getAttribute("aHue"),
@@ -67,10 +85,19 @@ export class PlanetaryTheme extends BaseTheme {
   }
 
   getGateways() {
-    return [];
+    return this.gateways;
   }
 
   destroy() {
+    this.earthGateway.enabled = false;
+    this.earthGateway.target = null;
+    this.earthGateway.crossing.target = null;
+    if (this.journeyDirector?.gateways === this.gateways) {
+      this.journeyDirector.setGateways([]);
+      this.journeyDirector.gatewayReady = false;
+      this.journeyDirector.onGatewayReady?.(false, null);
+    }
+    this.gateways.length = 0;
     this.deepSpace.dispose();
     this.milkyWay.dispose();
     this.solarSystem.dispose();

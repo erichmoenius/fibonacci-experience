@@ -1,4 +1,4 @@
-import { Journey } from "./Journey";
+import { Journey } from "./Journey.js";
 
 export const GalaxyJourneyPhase = {
   START: "START",
@@ -11,8 +11,8 @@ export const GalaxyJourneyPhase = {
 };
 
 export class GalaxyJourney extends Journey {
-  constructor() {
-    super("galaxy-planetary");
+  constructor({ id = "galaxy-planetary" } = {}) {
+    super(id);
 
     this.phase = GalaxyJourneyPhase.START;
     this.phaseTime = 0;

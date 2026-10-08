@@ -120,6 +120,7 @@ export class App {
         this.armedGateway = gateway;
       } else {
         this.activeGateway = null;
+        if (this.armedGateway?.readinessOnly || this.armedGateway === this.themeManager.activeTheme?.earthGateway) this.disarmArmedInvitation();
       }
 
       const theme = this.themeManager.activeTheme;
@@ -136,6 +137,9 @@ export class App {
     this.journeyDirector.onJourneyFinished = () => {
       console.log("🌌 EXPLORE");
 
+      if (this.journeyDirector.getJourney()?.id === "planetary-environment") {
+        console.log("Journey 3 COMPLETE: OUR WORLD exploration");
+      }
       this.cameraDirector.finishTravel();
     };
 
@@ -156,11 +160,38 @@ export class App {
           "Journey destination theme is unavailable:",
           destinationTheme,
         );
+        if (this.journeyDirector.getJourney()?.id === "planetary-environment") {
+          this.cameraDirector.finishTravel();
+          this.journeyDirector.stop();
+          this.transitSystem.stop();
+          this.pendingSavedReturnTheme = this.themeManager.activeTheme;
+          this.cameraDirector.returnHome(this.themeManager.activeTheme.getHomePose());
+          this.renderer.fadeIn(0.3);
+        }
         return;
       }
 
+      const earthJourney = this.journeyDirector.getJourney()?.id === "planetary-environment"
+        ? this.journeyDirector.getJourney() : null;
+      if (earthJourney) {
+        // Release source-object camera references before disposing Planetary.
+        this.cameraDirector.finishTravel();
+        this.cameraDirector.beginJourney(earthJourney);
+        this.journeyDirector.activeJourneyTarget = null;
+        this.journeyDirector.activeJourneyCrossing = null;
+      }
       this.themeManager.activate(destinationTheme);
       this.applyActiveThemeFlight();
+      if (this.themeManager.activeTheme.earthGateway) {
+        this.initializeActiveTheme();
+        this.journeyDirector.gatewayReady = false;
+      }
+      if (earthJourney) {
+        this.initializeActiveTheme();
+        this.themeManager.activeTheme.loadFlightSettings(false);
+        this.loadGUISettings();
+        console.log("Journey 3 BIRTH: OUR WORLD activated");
+      }
       this.activeGateway = null;
       this.armedGateway = null;
       this.journeyDirector.setGateways(
@@ -613,7 +644,7 @@ export class App {
       !this.journeyDirector.gatewayReady ||
       journeyGateway !== this.armedGateway ||
       journeyGateway?.acceptanceMode !== "proximity-lmb" ||
-      !journeyGateway.journey ||
+      (!journeyGateway.journey && !journeyGateway.readinessOnly) ||
       this.journeyDirector.isActive()
     )
       return false;
@@ -623,6 +654,30 @@ export class App {
     if (journeyGateway.target?.hitInspectionPointer && !journeyGateway.target.hitInspectionPointer(
       event, this.camera, this.renderer.renderer.domElement,
     )) return false;
+
+    if (journeyGateway.journey?.id === "planetary-environment") {
+      if (!this.cameraDirector.isMode(CameraMode.EXPLORE) || !journeyGateway.enabled ||
+          !journeyGateway.contains(this.cameraDirector.position) ||
+          !this.themeManager.themes.has(journeyGateway.destinationTheme)) return false;
+      const bounds = this.renderer.renderer.domElement.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return false;
+      this.acceptancePointer.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      );
+      this.acceptanceRaycaster.setFromCamera(this.acceptancePointer, this.camera);
+      if (!this.acceptanceRaycaster.intersectObject(journeyGateway.target, false).length) return false;
+      journeyGateway.intentCount += 1;
+    }
+
+    if (journeyGateway.readinessOnly) {
+      // Observe the existing intent route without consuming LMB or flight.
+      // Recheck live position: Earth may have moved since the latest frame.
+      if (!this.cameraDirector.isMode(CameraMode.EXPLORE) ||
+          !journeyGateway.enabled || !journeyGateway.contains(this.cameraDirector.position)) return false;
+      journeyGateway.intentCount += 1;
+      return false;
+    }
 
     console.log("JOURNEY_ACCEPTED: gateway proximity");
 
@@ -817,6 +872,12 @@ export class App {
         }
 
         if (e.code === "Escape" && !e.repeat) {
+          if (this.journeyDirector.getJourney?.()?.id === "planetary-environment") {
+            console.log("Journey 3 CANCEL: ESC");
+            this.cameraDirector.finishTravel();
+            this.transitSystem.stop();
+            this.renderer.fadeIn(0.3);
+          }
           this.pendingSavedReturnTheme = this.themeManager.activeTheme;
           const homePose = this.themeManager.activeTheme?.getHomePose?.();
           this.themeManager.activeTheme?.resetInspection?.();
@@ -846,6 +907,7 @@ export class App {
   }
 
   switchDevelopmentTheme(themeName) {
+    if (this.journeyDirector.getJourney?.()?.id === "planetary-environment") this.renderer.fadeIn(0.3);
     this.cameraDirector.cancel();
     this.cameraDirector.finishTravel();
     this.journeyDirector.stop();
@@ -1133,13 +1195,19 @@ export class App {
 
     this.exploreDirector.update(0.016);
 
+    // Moving planetary targets must advance once before proximity detection.
+    // Other themes keep their established update order.
+    const gatewayTheme = this.themeManager.activeTheme;
+    if (gatewayTheme?.updateBeforeGatewayDetection) this.themeManager.update(state);
     this.journeyDirector.update(this.cameraDirector.getPosition());
 
     this.transitSystem.update(0.016);
 
     this.updateEnvironment();
 
-    this.themeManager.update(state);
+    if (this.themeManager.activeTheme !== gatewayTheme || !gatewayTheme?.updateBeforeGatewayDetection) {
+      this.themeManager.update(state);
+    }
 
     this.themeManager.activeTheme?.updateFlightGUI();
     this.devHUD.update();

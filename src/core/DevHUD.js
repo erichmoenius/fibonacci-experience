@@ -66,6 +66,8 @@ export class DevHUD {
       ? journeyDirector.getPhase()
       : "-";
 
+    const earthGateway = import.meta.env.DEV ? theme?.earthGateway : null;
+    const earthPosition = earthGateway?.resolvePosition();
     this.element.textContent = [
       "DEV HUD",
       `Theme:        ${themeName.toUpperCase()}`,
@@ -75,8 +77,17 @@ export class DevHUD {
       `Gateway:      ${journeyDirector.gatewayReady ? "READY" : "-"}`,
       `Armed:        ${armedGateway ? "YES" : "NO"}`,
       `Journey:      ${journey}`,
+      ...(earthGateway ? [
+        `Earth gateway: ${journeyDirector.gateways.includes(earthGateway) ? "REGISTERED" : "-"}`,
+        `Earth world:   ${earthPosition.x.toFixed(2)}, ${earthPosition.y.toFixed(2)}, ${earthPosition.z.toFixed(2)}`,
+        `Earth distance: ${cameraDirector.position.distanceTo(earthPosition).toFixed(2)}`,
+        `Earth radius:  ${earthGateway.radius.toFixed(2)}`,
+        `Earth state:   ${earthGateway.enabled && earthGateway.contains(cameraDirector.position) ? "READY" : "NOT READY"}`,
+        `Earth intent:  ${earthGateway.intentCount}`,
+      ] : []),
       ...(import.meta.env.DEV
         ? [
+            `Journey ID: ${journeyDirector.getJourney()?.id ?? "-"}`,
             `JOURNEY SLOW-MO: ${journeyDirector.isSlowMotionEnabled() ? "3x" : "OFF"}`,
           ]
         : []),
