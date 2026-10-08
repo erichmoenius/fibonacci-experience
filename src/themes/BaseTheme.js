@@ -14,7 +14,7 @@ export class BaseTheme {
   getFlightSettings() { return { ...this.flightControls.settings }; }
   applyFlightSettings(values) { return this.flightControls.apply(values); }
   saveFlightSettings() { return this.flightControls.save(); }
-  loadFlightSettings() { return this.flightControls.load(); }
+  loadFlightSettings(notify = true) { return this.flightControls.load(notify); }
   resetFlightSettings() { this.flightControls.reset(); }
   disposeFlightGUI() { this.flightControls?.disposeGUI(); }
   updateFlightGUI() { this.flightControls?.updateDiagnostics(); }

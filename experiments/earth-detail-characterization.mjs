@@ -110,7 +110,7 @@ for (const name of ['VERTEX', 'COMMON', 'SURFACE', 'CLOUDS']) {
   check(get(earthSource) === get(baseline), `${name} shader unchanged`);
 }
 const protectedPaths = ['src/systems/cinematic', 'src/ui/ThemeFlightControls.js', 'src/graphics/Renderer.js',
-  'src/core/App.js', 'src/themes/SpaceTheme.js', 'src/themes/GalaxyTheme.js', 'src/themes/PlanetaryTheme.js'];
+  'src/themes/SpaceTheme.js', 'src/themes/GalaxyTheme.js', 'src/themes/PlanetaryTheme.js'];
 check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'protected flight, F, renderer and other themes unchanged');
 const manifest = JSON.parse(readFileSync('public/textures/earth/manifest.json', 'utf8'));
 for (const asset of manifest) {

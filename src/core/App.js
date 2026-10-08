@@ -73,7 +73,7 @@ export class App {
     );
 
     this.cameraDirector.onReturnHome = () => {
-      this.loadGUISettings();
+      this.restoreSavedSettingsAfterReturn();
     };
 
     this.exploreDirector = new ExploreDirector(this.cameraDirector);
@@ -816,8 +816,8 @@ export class App {
           }
         }
 
-        // TEMP DEBUG
-        if (e.code === "Escape") {
+        if (e.code === "Escape" && !e.repeat) {
+          this.pendingSavedReturnTheme = this.themeManager.activeTheme;
           const homePose = this.themeManager.activeTheme?.getHomePose?.();
           this.themeManager.activeTheme?.resetInspection?.();
           this.cameraDirector.returnHome(homePose);
@@ -832,6 +832,17 @@ export class App {
         }
       },
     );
+  }
+
+  restoreSavedSettingsAfterReturn() {
+    // Only ESC requests F restoration. Other Return Home callers retain their
+    // existing G-load contract. Discard requests belonging to a replaced theme.
+    const theme = this.pendingSavedReturnTheme;
+    this.pendingSavedReturnTheme = null;
+    if (theme && theme === this.themeManager.activeTheme) {
+      theme.loadFlightSettings(false);
+    }
+    this.loadGUISettings();
   }
 
   switchDevelopmentTheme(themeName) {
@@ -971,11 +982,9 @@ export class App {
   loadGUISettings() {
     const key = `hero-core-gui-${this.themeManager.activeThemeName}`;
 
-    const raw = localStorage.getItem(key);
-
-    if (!raw) return;
-
     try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
       const data = JSON.parse(raw);
 
       // Only obsolete Plasma tuning is excluded; current saves restore normally.
@@ -987,6 +996,7 @@ export class App {
       }
 
       this.gui.load(data);
+      this.gui.controllersRecursive().forEach((controller) => controller.updateDisplay());
 
       console.log("📂 GUI loaded");
 
