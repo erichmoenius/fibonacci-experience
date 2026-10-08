@@ -83,5 +83,22 @@
     "modifications": "Lanczos downsample; RGB; JPEG quality 95 without chroma subsampling for color/clouds, lossless PNG for data maps",
     "bytes": 1043241,
     "sha256": "9bdd2df80790dd9d810668fc896cc317b98674f50f9d4753e8e1312df1a65356"
+  },
+  {
+    "file": "day-8k.jpg",
+    "source": "https://www.solarsystemscope.com/textures/download/8k_earth_daymap.jpg",
+    "author": "Solar System Scope / INOVE",
+    "license": "CC BY 4.0",
+    "sourceDimensions": [
+      8192,
+      4096
+    ],
+    "dimensions": [
+      8192,
+      4096
+    ],
+    "modifications": "Unmodified original JPEG; same aligned day map used to derive day-4k.jpg. Existing shader saturation correction applies to both resolutions.",
+    "bytes": 4565076,
+    "sha256": "88ab060b6e7d241cfc590c69f528fab2b3247b738d40124cb590999a6fe44abc"
   }
 ]

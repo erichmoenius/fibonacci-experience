@@ -20,3 +20,12 @@ credited under CC BY rather than described as unmodified public-domain NASA data
 The collection uses a static seasonal surface composite and static sample cloud
 coverage, with enhanced source saturation. This is an artistic Earth depiction,
 not current weather, current city light observations, or a scientific simulation.
+
+## Optional High surface (detail pass 2)
+
+`day-8k.jpg` is the unmodified 8192 x 4096 original Solar System Scope / INOVE
+Earth day map from https://www.solarsystemscope.com/textures/download/8k_earth_daymap.jpg
+under the same CC BY 4.0 license. It shares the exact projection, orientation,
+and geography of the preserved 4K derivative. Existing shader saturation
+correction applies equally to both maps. No other map is upgraded.
+The five original 4K files remain unchanged. The optional map is hosted locally.

@@ -41,6 +41,20 @@ export class EnvironmentTheme extends BaseTheme {
     super(container, gui);
     this.earth = new EarthGlobe(container);
     this.group = this.earth.group;
+    // This folder belongs only to Theme 4 in the existing G Visual Lab.
+    // Root G Save/Load already uses hero-core-gui-environment; F is independent.
+    if (gui) {
+      this.visualFolder = gui.addFolder("Earth");
+      this.visualFolder.add(this.earth, "surfaceDetail", {
+        "Standard (4K)": "standard", "High (8K)": "high",
+      }).name("Earth surface detail").listen().onChange((value) => {
+        void this.earth.setSurfaceDetail(value);
+      });
+      const earth = this.earth;
+      // G Load must not restore stale diagnostic text over an in-flight request.
+      const diagnostics = { get status() { return earth.detailStatus; }, set status(value) {} };
+      this.visualFolder.add(diagnostics, "status").name("Surface status").listen().disable();
+    }
     this.lastUpdateTime = null;
     this.flight = new SphericalTravellerFlight({
       orbitCenter: this.earth.getWorldCenter(new THREE.Vector3()),
@@ -85,6 +99,7 @@ export class EnvironmentTheme extends BaseTheme {
   getGateways() { return []; }
 
   destroy() {
+    this.visualFolder?.destroy();
     this.earth.dispose();
     if (this.backgroundParticleField) {
       this.backgroundParticleField.visible = this.backgroundParticleFieldWasVisible;

@@ -2,6 +2,24 @@ import * as THREE from "three";
 
 export const EARTH_RADIUS = 2;
 const TAU = Math.PI * 2;
+// RGBA8/sRGB8_ALPHA8 including the complete mip chain. This is an Earth-only
+// budget, not a measurement of available VRAM (WebGL cannot expose that).
+export function textureBytes(width, height) {
+  let bytes = 0;
+  while (true) {
+    bytes += width * height * 4;
+    if (width === 1 && height === 1) return bytes;
+    width = Math.max(1, Math.floor(width / 2));
+    height = Math.max(1, Math.floor(height / 2));
+  }
+}
+export const EARTH_TEXTURE_BUDGET = 400 * 1024 * 1024;
+export const EARTH_STANDARD_BYTES = textureBytes(4096, 2048) * 5;
+export const EARTH_HIGH_BYTES = textureBytes(4096, 2048) * 4 + textureBytes(8192, 4096);
+export function supportsHighSurface(capabilities, budget = EARTH_TEXTURE_BUDGET) {
+  return capabilities?.maxTextureSize >= 8192
+    && EARTH_HIGH_BYTES + textureBytes(4096, 2048) <= budget;
+}
 const VERTEX = /* glsl */ `
   #include <common>
   varying vec2 vUv;
@@ -86,16 +104,36 @@ const ATMOSPHERE = /* glsl */ `
   ${COMMON}
   uniform vec3 earthCenter;
   void main() {
-    // Thin-shell Rayleigh-inspired optical path approximation, not a giant halo.
-    vec3 N = normalize(vNormal);
-    vec3 V = normalize(cameraPosition - vPosition);
-    float rim = pow(1.0 - abs(dot(N, V)), 4.5);
-    float sunlight = smoothstep(-0.12, 0.4, dot(N, sunDirection));
-    float phase = 0.75 * (1.0 + pow(dot(V, sunDirection), 2.0));
-    float alpha = rim * sunlight * phase * 0.24;
-    // Fade for a camera within the atmosphere instead of filling the screen.
-    alpha *= smoothstep(${EARTH_RADIUS.toFixed(1)}, 2.08, distance(cameraPosition, earthCenter));
-    gl_FragColor = vec4(vec3(0.17, 0.42, 0.88), alpha);
+    // Integrate a short exponential-density path inside the existing shell.
+    // Planet intersection truncates the ray: no atmosphere through solid Earth.
+    vec3 ray = normalize(vPosition - cameraPosition);
+    vec3 origin = cameraPosition - earthCenter;
+    float b = dot(origin, ray);
+    float outerRadius = ${EARTH_RADIUS.toFixed(1)} * 1.018;
+    float outerD = b * b - dot(origin, origin) + outerRadius * outerRadius;
+    float outerRoot = sqrt(max(outerD, 0.0));
+    float nearT = max(0.0, -b - outerRoot);
+    float farT = -b + outerRoot;
+    float groundD = b * b - dot(origin, origin) + ${EARTH_RADIUS.toFixed(1)} * ${EARTH_RADIUS.toFixed(1)};
+    if (groundD > 0.0) {
+      float groundT = -b - sqrt(groundD);
+      if (groundT > 0.0) farT = min(farT, groundT);
+    }
+    float stepLength = max(0.0, farT - nearT) / 6.0;
+    float opticalDepth = 0.0;
+    for (int i = 0; i < 6; i++) {
+      vec3 samplePosition = origin + ray * (nearT + (float(i) + 0.5) * stepLength);
+      float height = max(0.0, length(samplePosition) / ${EARTH_RADIUS.toFixed(1)} - 1.0);
+      // Density reaches zero smoothly at the outer boundary, hiding shell edges.
+      float density = max(0.0, exp(-height / 0.003) - exp(-0.018 / 0.003));
+      float solarAltitude = dot(normalize(samplePosition), normalize(sunDirection));
+      float illumination = smoothstep(-0.10, 0.18, solarAltitude);
+      opticalDepth += density * illumination * stepLength / ${EARTH_RADIUS.toFixed(1)};
+    }
+    float phase = 0.75 * (1.0 + pow(dot(ray, normalize(sunDirection)), 2.0));
+    float alpha = 1.0 - exp(-opticalDepth * phase * 2.8);
+    alpha *= smoothstep(${EARTH_RADIUS.toFixed(1)}, 2.08, length(origin));
+    gl_FragColor = vec4(vec3(0.20, 0.38, 0.62), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -105,6 +143,13 @@ const ATMOSPHERE = /* glsl */ `
 export class EarthGlobe {
   constructor(container, { loader = new THREE.TextureLoader() } = {}) {
     this.disposed = false;
+    this.loader = loader;
+    this.surfaceDetail = "standard";
+    this.effectiveSurfaceDetail = "standard";
+    this.detailStatus = "Standard (4K)";
+    this.detailRequest = 0;
+    this.detailLoading = null;
+    this.rendererReady = new Promise((resolve) => { this.resolveRenderer = resolve; });
     this.textures = new Set();
     this.loadErrors = [];
     this.group = new THREE.Group();
@@ -140,6 +185,8 @@ export class EarthGlobe {
     // Camera and capability information arrives through the existing renderer.
     // No extra scene lights are needed by these directional solar shaders.
     this.surface.onBeforeRender = (renderer) => {
+      this.renderer = renderer;
+      this.resolveRenderer(renderer);
       const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
       for (const texture of this.textures) {
         if (texture.anisotropy !== anisotropy) {
@@ -176,6 +223,77 @@ export class EarthGlobe {
     this.ready.then(() => { if (!this.disposed) this.group.visible = true; });
   }
 
+  // Serialize downloads, retain the active map until replacement succeeds, and
+  // dispose superseded/late results. Neither meshes nor shader programs change.
+  async setSurfaceDetail(detail) {
+    if (this.disposed || !["standard", "high"].includes(detail)) return false;
+    this.surfaceDetail = detail;
+    const request = ++this.detailRequest;
+    this.detailStatus = detail === "high" ? "Checking High (8K)…" : "Loading Standard (4K)…";
+    await this.ready;
+    if (this.detailLoading) await this.detailLoading;
+    if (this.disposed || request !== this.detailRequest) return false;
+    if (this.effectiveSurfaceDetail === detail) {
+      this.detailStatus = detail === "high" ? "High (8K)" : "Standard (4K)";
+      return true;
+    }
+    const renderer = detail === "high" ? await this.rendererReady : this.renderer;
+    if (this.disposed || request !== this.detailRequest) return false;
+    if (detail === "high" && !supportsHighSurface(renderer?.capabilities)) {
+      this.surfaceDetail = "standard";
+      this.detailStatus = "Standard (4K): High unavailable";
+      return false;
+    }
+    this.detailStatus = detail === "high" ? "Loading High (8K)…" : "Loading Standard (4K)…";
+    const load = new Promise((resolve) => {
+      const fail = (reason) => {
+        if (!this.disposed && request === this.detailRequest) {
+          this.surfaceDetail = this.effectiveSurfaceDetail;
+          this.detailStatus = `${this.effectiveSurfaceDetail === "high" ? "High (8K)" : "Standard (4K)"}: ${reason}`;
+          console.warn(`OUR WORLD: ${reason}; current surface retained.`);
+        }
+        resolve(false);
+      };
+      try {
+        this.loader.load(`${import.meta.env.BASE_URL}textures/earth/day-${detail === "high" ? "8k" : "4k"}.jpg`, (texture) => {
+          if (this.disposed || request !== this.detailRequest) { texture.dispose(); resolve(false); return; }
+          const width = detail === "high" ? 8192 : 4096;
+          if (texture.image?.width !== width || texture.image?.height !== width / 2) {
+            texture.dispose(); fail("Unexpected surface dimensions"); return;
+          }
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.ClampToEdgeWrapping;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.generateMipmaps = true;
+          texture.anisotropy = Math.min(8, renderer?.capabilities.getMaxAnisotropy() ?? 1);
+          texture.needsUpdate = true;
+          try {
+            // Prepare on the existing renderer before releasing the known-good map.
+            renderer?.initTexture(texture);
+          } catch {
+            texture.dispose(); fail("Surface upload failed"); return;
+          }
+          const old = this.uniforms.dayMap.value;
+          this.uniforms.dayMap.value = texture;
+          this.textures.add(texture);
+          this.textures.delete(old);
+          old.dispose();
+          this.effectiveSurfaceDetail = detail;
+          this.detailStatus = detail === "high" ? "High (8K)" : "Standard (4K)";
+          resolve(true);
+        }, undefined, () => fail("Surface download failed"));
+      } catch {
+        fail("Surface loader failed");
+      }
+    });
+    this.detailLoading = load;
+    const result = await load;
+    if (this.detailLoading === load) this.detailLoading = null;
+    return result;
+  }
+
   getWorldCenter(target) { return this.group.getWorldPosition(target); }
 
   update(delta) {
@@ -189,6 +307,9 @@ export class EarthGlobe {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    ++this.detailRequest;
+    this.resolveRenderer(null);
+    this.renderer = null;
     this.group.removeFromParent();
     for (const mesh of [this.surface, this.clouds, this.atmosphere]) {
       mesh.onBeforeRender = () => {};
