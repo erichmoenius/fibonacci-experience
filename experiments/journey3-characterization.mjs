@@ -111,9 +111,15 @@ app.themeManager.activate = name => {
   maskedActivation = journey.atmosphere.whiteout === 1 && app.renderer.fadeOverlay.children[2].style.opacity === "1";
   activate(name);
 };
-function tick(app, delta) { app.themeManager.update({ time: (app.time = (app.time ?? 0) + delta) }); app.cameraDirector.update(delta); app.journeyDirector.update(app.cameraDirector.position, delta); }
+function tick(app, delta) {
+  app.themeManager.update({ time: (app.time = (app.time ?? 0) + delta) });
+  const earth = app.journeyDirector.getJourney()?.id === 'planetary-environment' ? app.journeyDirector.getJourney() : null;
+  if (earth) app.journeyDirector.update(app.cameraDirector.position, delta);
+  app.cameraDirector.update(earth?.completed ? 0 : delta);
+  if (!earth) app.journeyDirector.update(app.cameraDirector.position, delta);
+}
 const phases = ['APPROACH', 'HORIZON', 'SINGULARITY', 'WORMHOLE', 'VOID', 'BIRTH'];
-for (const [index, duration] of [2, 3, 3, 4, 4, 1].entries()) {
+for (const [index, duration] of [2, 1.25, 1.25, 1, 1, 1].entries()) {
   // Camera callbacks follow the same clock; small steps avoid jumping phases.
   for (let frame = 0; frame < duration * 100 + 2 && journey.phase !== phases[index]; frame++) tick(app, 0.01);
   check(journey.phase === phases[index], `phase ${phases[index]}`);
@@ -123,10 +129,10 @@ check(activations === 1 && maskedActivation && app.journeyDirector.activeJourney
 check(!gateway.enabled && gateway.target === null && app.journeyDirector.gateways.length === 0 && !app.activeGateway && !app.armedGateway, 'source gateway released');
 check(!app.cameraDirector.approachCoreObject && !app.cameraDirector.crossingCoreObject && !app.journeyDirector.activeJourneyTarget, 'source camera/director references released');
 const home = app.themeManager.activeTheme.getHomePose();
-check(app.cameraDirector.flightSystem.flight.targetPose.position.equals(home.position), 'existing OUR WORLD home is travel destination');
+check(!app.cameraDirector.flightSystem.flight && app.cameraDirector.position.equals(journey.arrivalStart), 'actual arrival pose established under whiteout without a parallel flight');
 tick(app, 0.01);
-check(app.cameraDirector.position.equals(home.position) && journey.atmosphere.whiteout > 0.999,
-  'masked home camera is established before destination reveal');
+check(app.cameraDirector.position.equals(journey.arrivalStart) && journey.atmosphere.whiteout > 0.999,
+  'masked arrival camera is established before destination reveal');
 check(!app.transitSystem.active && !app.renderer.fades.some(([type]) => type === 'out'),
   'Journey 3 never starts wormhole transit or black fade');
 check(app.themeManager.activeTheme.flight.rmbMaxSpeed === 2.5, 'saved destination F restored');
@@ -149,7 +155,7 @@ old.onEvent = e => oldEvents.push(e); current.onEvent = e => currentEvents.push(
 for (let i = 0; i < 2100; i++) { old.update(0.01); current.update(0.01); check(old.phase === current.phase && old.phaseTime === current.phaseTime && old.completed === current.completed, 'Journey 2 timing unchanged'); }
 check(current.id === old.id && JSON.stringify(oldEvents) === JSON.stringify(currentEvents), 'Journey 2 identity and events unchanged');
 
-for (const cancelPhase of ['APPROACH', 'WORMHOLE', 'BIRTH']) {
+for (const cancelPhase of ['START', 'APPROACH', 'HORIZON', 'SINGULARITY', 'WORMHOLE', 'VOID', 'BIRTH']) {
   const cancelAfterBirth = cancelPhase === 'BIRTH';
   const a = fixture(); a.acceptReadyProximityGateway(click); const active = a.journeyDirector.getJourney();
   if (cancelAfterBirth) for (let i = 0; i < 1800 && a.themeManager.activeThemeName !== 'environment'; i++) tick(a, 0.01);
@@ -166,6 +172,7 @@ for (const cancelPhase of ['APPROACH', 'WORMHOLE', 'BIRTH']) {
   check(cancelAfterBirth ? a.themeManager.activeTheme.earth.surfaceDetail === "high" : a.look.scale === 2.5, "ESC restores active saved G independently");
   check(a.renderer.fades.some(([type, duration]) => type === 'in' && duration === 0.3), 'ESC clears curtain');
   check(!a.cameraDirector.freeFlight.pointer.active && !a.cameraDirector.freeFlight.pointer.rmbActive, "ESC resets both mouse buttons");
+  if (cancelAfterBirth) check(a.themeManager.activeTheme.earth.uniforms.sunDirection.value.equals(new THREE.Vector3(-0.85, 0.35, 0.65).normalize()), 'ESC restores temporary destination illumination');
   check(active.atmosphere.cleared && active.target === null && a.renderer.fadeOverlay.children.length === 0
     && a.renderer.fadeOverlay.style.opacity === '0', 'ESC clears all atmospheric effects and references');
   a.themeManager.activeTheme.destroy();
@@ -183,9 +190,97 @@ check(failedJourney.cancelled && !lostDestination.journeyDirector.isActive() && 
 check(lostDestination.themeManager.activeThemeName === 'planetary' && !lostDestination.transitSystem.active && !lostDestination.cameraDirector.journey, 'failed transition releases source control');
 lostDestination.cameraDirector.finishReturn(); lostDestination.themeManager.activeTheme.destroy();
 
+// Run the actual App frame method at different refresh rates. Only Journey 3
+// receives measured elapsed time; its camera and phase clock share that delta.
+const originalPerformance = globalThis.performance;
+let frameMilliseconds = 0;
+globalThis.performance = { now: () => frameMilliseconds };
+const durations = []; let birthTrace;
+try {
+  for (const [fps, timeScale] of [[30, 1], [60, 1], [120, 1], [60, 1 / 3]]) {
+    frameMilliseconds = 0;
+    const a = fixture(); a.journeyDirector.timeScale = timeScale;
+    Object.assign(a, { stats: { begin() {}, end() {} }, scroll: { updateScroll() {} }, intensity: 0,
+      buildState() { return { time: this.time }; }, interactionManager: { update() {} }, updateCamera() {},
+      exploreDirector: { update() {} }, updateEnvironment() {
+        this.camera.far = this.themeManager.activeTheme.getCameraFar?.() ?? 100;
+        this.camera.updateProjectionMatrix();
+      }, devHUD: { update() {} },
+      points: { rotation: { x: 0, y: 0 } }, wheel: { delta: 0 } });
+    a.transitSystem.update = () => {};
+    check(a.acceptReadyProximityGateway(click), 'frame-clock fixture accepts real surface hit');
+    const active = a.journeyDirector.getJourney();
+    const frame = method('update');
+    let births = 0; const activate = a.themeManager.activate.bind(a.themeManager);
+    a.themeManager.activate = name => { births++; activate(name); };
+    let lastPosition, lastQuaternion;
+    const trace = [];
+    const snapshot = (label) => {
+      const theme = a.themeManager.activeTheme;
+      const globe = theme.earth ?? theme.solarSystem.earthGlobe;
+      a.camera.updateMatrixWorld(true);
+      const center = globe.getWorldCenter(new THREE.Vector3());
+      trace.push({ label, seconds: frameMilliseconds / 1000, center: center.toArray(), groupRotation: globe.group.rotation.toArray().slice(0, 3), surfaceRotation: globe.surface.rotation.toArray().slice(0, 3), theme: a.themeManager.activeThemeName, position: a.camera.position.toArray(),
+        target: a.cameraDirector.currentTarget.toArray(), quaternion: a.camera.quaternion.toArray(),
+        fov: a.camera.fov, aspect: a.camera.aspect, near: a.camera.near, far: a.camera.far,
+        radius: 2, distance: a.camera.position.distanceTo(center),
+        angularRadius: Math.asin(2 / a.camera.position.distanceTo(center)),
+        sun: globe.uniforms.sunDirection.value.toArray(), owner: a.cameraDirector.mode });
+    };
+    const birthCallback = a.journeyDirector.onBirth;
+    a.journeyDirector.onBirth = theme => { snapshot('handoff-source'); birthCallback(theme); };
+    let destinationApplied = false;
+    let preVeil = false, firstBirth = false, lastBirth = false;
+    for (let count = 0; count < fps * 32 && a.journeyDirector.isActive(); count++) {
+      lastPosition = a.cameraDirector.position.clone();
+      lastQuaternion = a.camera.quaternion.clone();
+      if (!lastBirth && active.phase === 'BIRTH' && active.phaseTime >= 2.5 - timeScale / fps - 1e-8) {
+        snapshot('last-birth'); lastBirth = true;
+      }
+      frameMilliseconds += 1000 / fps;
+      frame.call(a);
+      if (active.arrived && !destinationApplied) { snapshot('handoff-destination'); destinationApplied = true; }
+      if (!preVeil && active.elapsed >= 6.5 - 1 / fps * timeScale) { snapshot('last-pre-veil'); preVeil = true; }
+      if (!firstBirth && active.arrived && active.phaseTime > 0 && active.atmosphere.whiteout < 1) { snapshot('first-visible-birth'); firstBirth = true; }
+      // Browser task boundary: allow the existing shared-map readiness to settle.
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    }
+    const duration = frameMilliseconds / 1000;
+    durations.push({ fps, timeScale, seconds: Number(duration.toFixed(6)) });
+    check(Math.abs(duration - 10 / timeScale) <= 2 / fps + 1e-8, 'click-to-exploration duration is frame-rate independent');
+    check(active.completed && !a.journeyDirector.isActive() && a.cameraDirector.freeFlight.active
+      && a.cameraDirector.mode === CameraMode.EXPLORE && !a.cameraDirector.journey, 'measured-clock completion restores exploration');
+    check(births === 1 && a.renderer.fadeOverlay.children.length === 0, 'single handoff and no lingering layers');
+    check(a.cameraDirector.position.distanceTo(lastPosition) < 0.002, 'reveal-to-exploration camera has no abrupt jump');
+    check(a.cameraDirector.position.equals(a.themeManager.activeTheme.getHomePose().position), 'reveal finishes exactly at established home');
+    snapshot('birth-complete');
+    check(a.camera.quaternion.angleTo(lastQuaternion) < 0.002, 'last rendered BIRTH rotation adopted at completion');
+    check(!a.cameraDirector.flightSystem.flight, 'no competing or lingering destination flight');
+    const source = trace.find(t => t.label === 'handoff-source');
+    const destination = trace.find(t => t.label === 'handoff-destination');
+    const visible = trace.find(t => t.label === 'first-visible-birth');
+    check(Math.abs(Math.asin(active.sourceRadius / active.sourceRelative.length()) - destination.angularRadius) < 1e-7, 'destination immediately preserves source apparent scale');
+    check(Math.abs(visible.angularRadius - destination.angularRadius) < 0.002, 'first visible BIRTH starts at established horizon scale');
+    check(source.fov === destination.fov && destination.fov === visible.fov, 'FOV continuous through masked handoff');
+    const completedPosition = a.camera.position.clone(), completedRotation = a.camera.quaternion.clone();
+    frameMilliseconds += 1000 / fps; frame.call(a); snapshot('first-normal-exploration');
+    check(a.camera.position.distanceTo(completedPosition) < 0.002, 'first real exploration frame has no idle position step');
+    check(a.camera.quaternion.angleTo(completedRotation) < 0.002, 'first real exploration frame has no rotation step');
+    check(trace.at(-1).fov === visible.fov && a.renderer.fadeOverlay.children.length === 0, 'normal exploration projection and curtain continuous');
+    const nearPose = a.camera.position.clone();
+    frameMilliseconds += 1000 / fps; frame.call(a);
+    check(a.camera.position.distanceTo(nearPose) < 0.006, 'second exploration frame continues idle entry smoothly');
+    a.cameraDirector.setExploreTravel(a.themeManager.activeTheme.flight);
+    check(a.cameraDirector.arrivalIdleStart === undefined, 'adapter switch clears scoped idle entry state');
+    if (fps === 60 && timeScale === 1) birthTrace = trace;
+    a.themeManager.activeTheme.destroy();
+  }
+} finally { globalThis.performance = originalPerformance; }
 app.themeManager.activeTheme.destroy();
 check(writes === 0 && JSON.stringify([...storage]) === presetBefore, 'ESC and completion preserve all presets');
 THREE.TextureLoader.prototype.load = textureLoad;
 delete globalThis.document; delete globalThis.window; delete globalThis.localStorage;
 console.log = originalLog; console.warn = originalWarn; console.trace = originalTrace;
+console.log(`BIRTH boundary trace: ${JSON.stringify(birthTrace)}`);
+console.log(`Measured App durations: ${JSON.stringify(durations)}`);
 console.log(`Journey 3 characterization: PASS (${checks} checks including Journey 2 replay). No physical GREEN claim.`);

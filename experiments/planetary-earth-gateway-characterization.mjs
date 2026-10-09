@@ -115,7 +115,7 @@ theme.updateBeforeGatewayDetection = true;
 frameOrder.length = 0;
 director.activeJourney = { id: 'planetary-environment', update() {} };
 appMethod('update').call(app);
-check(frameOrder.join(',') === 'theme,camera,gateway', 'descent updates live Earth before camera exactly once');
+check(frameOrder.join(',') === 'theme,gateway,camera', 'descent updates live Earth before camera exactly once');
 director.activeJourney = null;
 // Existing Galaxy route is still consuming and executable, including optical hit.
 const galaxyGateway = new Gateway(new THREE.Vector3(), 2.5, { hitInspectionPointer: () => false });

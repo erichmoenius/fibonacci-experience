@@ -1,0 +1,87 @@
+{
+  "cancellations": [
+    {
+      "label": "cancel-1",
+      "time": 1407.1999999955297,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "cancel-0.4",
+      "time": 1408.0999999940395,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    }
+  ],
+  "kind": "Real headless Chromium CSS/compositor fixture using production JourneyAtmosphere; no app preview or Three.js GPU claim",
+  "rows": [
+    {
+      "label": "last-travel",
+      "time": 111.89999999850988,
+      "logicalOpacity": "1",
+      "computedOpacity": 1,
+      "background": "rgba(0, 0, 0, 0)",
+      "transition": "none",
+      "children": 3,
+      "blend": "normal"
+    },
+    {
+      "label": "completion",
+      "time": 117.79999999701977,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "first-explore",
+      "time": 147.69999999552965,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "explore-later",
+      "time": 301.3999999985099,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "stable",
+      "time": 1405.5999999940395,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    }
+  ],
+  "firstExplorePixel": [
+    64,
+    128,
+    192
+  ],
+  "stableScenePixel": [
+    64,
+    128,
+    192
+  ]
+}

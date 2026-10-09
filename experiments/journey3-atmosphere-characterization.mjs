@@ -61,20 +61,21 @@ for (const scale of [[1, 1, 1], [1.4, 0.9, 1.2]]) for (const close of [false, tr
     'immersion focuses on the measured visible limb');
   const arrival = { position: new THREE.Vector3(0, 0, 6.5), lookTarget: new THREE.Vector3() };
   j.setArrivalPose(arrival);
-  check(j.target === null && j.getAtmosphericPose().position.equals(arrival.position), 'source released and home fixed before reveal');
+  check(j.target === null && j.getAtmosphericPose().position.equals(j.arrivalStart), 'source released and arrival pose masked before reveal');
   let previousReveal = 1;
   for (let frame = 0; frame < 310 && !j.completed; frame++) {
     j.update(0.01);
     if (!j.completed) {
       check(j.atmosphericState.reveal <= previousReveal + 1e-10, 'gentle monotonic destination reveal');
-      check(j.getAtmosphericPose().position.equals(arrival.position), 'reveal never shows en-route destination camera');
+      check(j.getAtmosphericPose().position.distanceTo(arrival.lookTarget) >= j.arrivalStart.distanceTo(arrival.lookTarget) - 1e-10
+        && j.getAtmosphericPose().position.distanceTo(arrival.lookTarget) <= arrival.position.distanceTo(arrival.lookTarget) + 1e-10, 'reveal stays within deliberate arrival pull-back');
       previousReveal = j.atmosphericState.reveal;
     }
   }
   check(j.completed && j.atmosphere.cleared && f.overlay.children.length === 0 && j.getAtmosphericPose() === null, 'complete clears effects and pose ownership');
   f.earth.geometry.dispose();
 }
-for (const targetPhase of ['APPROACH', 'HORIZON', 'WORMHOLE', 'VOID', 'BIRTH']) {
+for (const targetPhase of ['START', 'APPROACH', 'HORIZON', 'SINGULARITY', 'WORMHOLE', 'VOID', 'BIRTH']) {
   const f = fixture(); while (f.journey.phase !== targetPhase) f.journey.update(0.01);
   f.journey.cancel(); const phase = f.journey.phase; f.journey.update(100);
   check(f.journey.cancelled && f.journey.target === null && f.overlay.children.length === 0
@@ -123,7 +124,14 @@ abortedLoading.earth.geometry.dispose();
 const checkpoint = '2e8aa06f3557107b9468c3a83f57e183c52ab9ed';
 const baselineCamera = execFileSync('git', ['show', `${checkpoint}:src/systems/cinematic/CameraDirector.js`], { encoding: 'utf8' });
 const cameraSource = readFileSync('src/systems/cinematic/CameraDirector.js', 'utf8');
-const stripped = cameraSource.replace(/    \/\/ Opt-in Journey 3 pose\.[\s\S]*?    if \(this\.approachActive\)/,
+const continuityStripped = cameraSource
+  .replace('finishTravel(applyPose = true)', 'finishTravel()')
+  .replace('    this.arrivalIdleStart = undefined;\r\n', '')
+  .replace(/    \/\/ Opt-in Journey 3 endpoint:[\s\S]*?    const flight =/, '    const flight =')
+  .replace('    if (explorationPose && applyPose) this.applyComputedPosition();\r\n', '')
+  .replace(/    \/\/ Opt-in Journey 3 release:[\s\S]*?    this\.position\.y \+= [^\n]*;\r?\n/,
+    '    this.position.x += Math.sin(time * 0.3) * 0.2 + px + idle.x;\r\n    this.position.y += Math.cos(time * 0.2) * 0.2 + py + idle.y;\r\n');
+const stripped = continuityStripped.replace(/    \/\/ Opt-in Journey 3 pose\.[\s\S]*?    if \(this\.approachActive\)/,
   '    if (this.approachActive)');
 check(stripped.replaceAll('\r\n', '\n') === baselineCamera.replaceAll('\r\n', '\n'), 'all non-descent camera code unchanged');
 const protectedPaths = ['src/systems/cinematic/GalaxyJourney.js', 'src/systems/cinematic/JourneyDirector.js',

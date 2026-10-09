@@ -143,8 +143,10 @@ try {
     check(shader(earthSource) === shader(baselineEarth), `${name} shader unchanged from GREEN`);
   }
   const protectedPaths = ['src/core', 'src/themes', 'src/systems/cinematic', 'src/systems/PlanetaryFlight.js',
-    'src/ui', 'src/graphics', 'public/textures', 'src/systems/SphericalTravellerFlight.js'];
-  check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'all gateway/cinematic/flight/Theme 4/UI/renderer/asset source protected');
+    'src/ui', 'src/graphics', 'public/textures', 'src/systems/SphericalTravellerFlight.js',
+    ':(exclude)src/core/App.js', ':(exclude)src/systems/cinematic/EarthJourney.js',
+    ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js'];
+  check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'all gateway/flight/Theme 4/UI/renderer/asset source protected; scoped Journey 3 clock/camera covered by Pass 6');
 } finally {
   THREE.TextureLoader.prototype.load = load; delete globalThis.window;
 }

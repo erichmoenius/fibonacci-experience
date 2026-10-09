@@ -1,0 +1,65 @@
+{
+  "kind": "Real headless Chromium CSS/compositor fixture using production JourneyAtmosphere; no app preview or Three.js GPU claim",
+  "rows": [
+    {
+      "label": "last-travel",
+      "time": 111.29999999701977,
+      "logicalOpacity": "1",
+      "computedOpacity": 1,
+      "background": "rgba(0, 0, 0, 0)",
+      "transition": "none",
+      "children": 3,
+      "blend": "normal"
+    },
+    {
+      "label": "completion",
+      "time": 114.69999999552965,
+      "logicalOpacity": "0",
+      "computedOpacity": 1,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "first-explore",
+      "time": 133.29999999701977,
+      "logicalOpacity": "0",
+      "computedOpacity": 1,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "explore-later",
+      "time": 275.1000000014901,
+      "logicalOpacity": "0",
+      "computedOpacity": 0.849943,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    },
+    {
+      "label": "stable",
+      "time": 1389.6999999955297,
+      "logicalOpacity": "0",
+      "computedOpacity": 0,
+      "background": "rgb(0, 0, 0)",
+      "transition": "opacity 1s linear",
+      "children": 0,
+      "blend": "normal"
+    }
+  ],
+  "firstExplorePixel": [
+    2,
+    4,
+    6
+  ],
+  "stableScenePixel": [
+    64,
+    128,
+    192
+  ]
+}

@@ -144,7 +144,7 @@ export class App {
       if (this.journeyDirector.getJourney()?.id === "planetary-environment") {
         console.log("Journey 3 COMPLETE: OUR WORLD exploration");
       }
-      this.cameraDirector.finishTravel();
+      this.cameraDirector.finishTravel(this.journeyDirector.getJourney()?.id !== "planetary-environment");
     };
 
     this.journeyDirector.onVoidStart = () => {
@@ -182,6 +182,7 @@ export class App {
       const earthJourney = this.journeyDirector.getJourney()?.id === "planetary-environment"
         ? this.journeyDirector.getJourney() : null;
       if (earthJourney) {
+        earthJourney.captureArrival();
         earthJourney.maskHandoff();
         // Release source-object camera references before disposing Planetary.
         this.cameraDirector.finishTravel();
@@ -210,9 +211,14 @@ export class App {
       const pose = this.themeManager.activeTheme?.getHomePose();
 
       if (pose) {
-        // The destination jump is fully masked; reveal only its existing home.
-        earthJourney?.setArrivalPose(pose, this.themeManager.activeTheme.earth?.ready);
-        this.cameraDirector.travel(pose);
+        if (earthJourney) {
+          const earth = this.themeManager.activeTheme.earth;
+          earthJourney.setArrivalPose(pose, earth?.ready, earth);
+          // The single camera update below establishes this pose while opaque.
+          // No callback camera write or parallel destination flight during BIRTH.
+        } else {
+          this.cameraDirector.travel(pose);
+        }
       }
 
       if (!earthJourney) this.renderer.fadeIn(3);
@@ -1201,14 +1207,21 @@ export class App {
 
     this.updateCamera();
 
+    const activeJourney = this.journeyDirector.getJourney?.();
+    const descentDelta = activeJourney?.id === "planetary-environment"
+      ? activeJourney.getFrameDelta?.(this.time) ?? 0.016 : 0.016;
     const journeyCameraDelta = this.journeyDirector.isActive()
-      ? this.journeyDirector.getScaledDelta(0.016)
+      ? this.journeyDirector.getScaledDelta(descentDelta)
       : 0.016;
 
     const descentTheme = this.journeyDirector.getJourney()?.id === "planetary-environment"
       && this.themeManager.activeTheme?.updateBeforeGatewayDetection ? this.themeManager.activeTheme : null;
     if (descentTheme) this.themeManager.update(state);
-    this.cameraDirector.update(journeyCameraDelta);
+    const descentJourney = activeJourney?.id === "planetary-environment" ? activeJourney : null;
+    // Journey 3 clock/callbacks prepare this frame's state before its one camera
+    // update. Other journeys preserve their established camera-first ordering.
+    if (descentJourney) this.journeyDirector.update(this.cameraDirector.getPosition(), descentDelta);
+    this.cameraDirector.update(descentJourney?.completed ? 0 : journeyCameraDelta);
 
     this.exploreDirector.update(0.016);
 
@@ -1216,7 +1229,7 @@ export class App {
     // Other themes keep their established update order.
     const gatewayTheme = this.themeManager.activeTheme;
     if (gatewayTheme?.updateBeforeGatewayDetection && gatewayTheme !== descentTheme) this.themeManager.update(state);
-    this.journeyDirector.update(this.cameraDirector.getPosition());
+    if (!descentJourney) this.journeyDirector.update(this.cameraDirector.getPosition(), descentDelta);
 
     this.transitSystem.update(0.016);
 

@@ -53,10 +53,15 @@ export class JourneyAtmosphere {
     for (const layer of this.layers) layer.remove();
     this.layers.length = 0;
     if (this.overlay) {
+      // Commit transparency with transitions disabled before restoring the
+      // borrowed black curtain/transition. Otherwise CSS animates its parent
+      // from opacity 1 to 0 over the first second of exploration.
+      this.overlay.style.transition = "none";
+      this.overlay.style.opacity = "0";
+      void this.overlay.offsetWidth;
       this.overlay.style.overflow = this.original.overflow;
       this.overlay.style.background = this.original.background;
       this.overlay.style.transition = this.original.transition;
-      this.overlay.style.opacity = "0";
     }
     this.overlay = null;
   }

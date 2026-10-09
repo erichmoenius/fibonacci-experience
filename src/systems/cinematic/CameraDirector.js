@@ -285,6 +285,7 @@ export default class CameraDirector {
   }
 
   setExploreTravel(flight) {
+    this.arrivalIdleStart = undefined;
     this.exploreTravel = flight;
     this.freeFlight.galaxyPrecisionStrafe = Boolean(flight && flight.kind !== "heliocentric");
     this.freeFlight.reset();
@@ -783,7 +784,15 @@ export default class CameraDirector {
     this.onReturnHome?.();
   }
 
-  finishTravel() {
+  finishTravel(applyPose = true) {
+    // Opt-in Journey 3 endpoint: adopt its rendered pose before releasing ownership.
+    const explorationPose = this.journey?.getExplorationPose?.();
+    if (explorationPose) {
+      this.currentPose.position.copy(explorationPose.position);
+      this.currentPose.lookTarget.copy(explorationPose.lookTarget);
+      this.flightSystem.stop();
+      this.arrivalIdleStart = performance.now() * 0.001;
+    }
     const flight = this.flightSystem.flight;
     if (flight) {
       this.currentPose.copy(flight.targetPose);
@@ -809,6 +818,7 @@ export default class CameraDirector {
     this.crossingCoreObject = null;
 
     this.setMode(CameraMode.EXPLORE);
+    if (explorationPose && applyPose) this.applyComputedPosition();
   }
 
   // Main update(delta)
@@ -921,8 +931,12 @@ export default class CameraDirector {
 
     this.position.copy(this.basePosition);
 
-    this.position.x += Math.sin(time * 0.3) * 0.2 + px + idle.x;
-    this.position.y += Math.cos(time * 0.2) * 0.2 + py + idle.y;
+    // Opt-in Journey 3 release: idle displacement enters continuously from zero.
+    const idleBlend = this.arrivalIdleStart === undefined ? 1
+      : THREE.MathUtils.smootherstep(performance.now() * 0.001 - this.arrivalIdleStart, 0, 1);
+    if (idleBlend === 1) this.arrivalIdleStart = undefined;
+    this.position.x += (Math.sin(time * 0.3) * 0.2 + idle.x) * idleBlend + px;
+    this.position.y += (Math.cos(time * 0.2) * 0.2 + idle.y) * idleBlend + py;
 
     return this.position;
   }
