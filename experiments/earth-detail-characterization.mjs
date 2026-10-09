@@ -107,7 +107,7 @@ const checkpoint = '981562083ad1ac9110920cd9f68c61c08ca26b06';
 const baseline = execFileSync('git', ['show', `${checkpoint}:src/systems/EarthGlobe.js`], { encoding: 'utf8' });
 for (const name of ['VERTEX', 'COMMON', 'SURFACE', 'CLOUDS']) {
   const get = source => source.match(new RegExp(`const ${name} = [\\s\\S]*?\\n\\x60;`))[0];
-  check(get(earthSource) === get(baseline), `${name} shader unchanged`);
+  check(get(earthSource).replaceAll('\r\n', '\n') === get(baseline).replaceAll('\r\n', '\n'), `${name} shader unchanged`);
 }
 const protectedPaths = ['src/systems/cinematic', 'src/ui/ThemeFlightControls.js', 'src/graphics/Renderer.js',
   'src/themes/SpaceTheme.js', 'src/themes/GalaxyTheme.js',

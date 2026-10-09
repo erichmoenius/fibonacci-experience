@@ -139,11 +139,57 @@ const ATMOSPHERE = /* glsl */ `
   }
 `;
 
-/** Theme 4 only. Assets are local; no renderer/global-light mutations. */
+// One loader and reference-counted local maps across the synchronous theme handoff.
+// A microtask grace period transfers GPU texture ownership without a reload;
+// leaving Earth entirely releases every map. Injected loaders stay isolated.
+const sharedLoader = new THREE.TextureLoader();
+const sharedMaps = new Map();
+const configuredMaps = new WeakSet();
+function acquireMap(loader, url) {
+  const shared = loader === sharedLoader;
+  let entry = shared ? sharedMaps.get(url) : null;
+  if (!entry) {
+    entry = { references: 1, texture: null, settled: false };
+    if (shared) sharedMaps.set(url, entry);
+    entry.ready = new Promise((resolve) => {
+      const finish = (texture) => {
+        entry.texture = texture;
+        entry.settled = true;
+        resolve(texture);
+        if (!entry.references) retire();
+      };
+      // Promise callbacks run after the lease has acquired its reference.
+      try { loader.load(url, texture => finish(texture), undefined, () => finish(null)); }
+      catch { finish(null); }
+    });
+  } else entry.references++;
+  function retire() {
+    const release = () => {
+      if (entry.references || !entry.settled) return;
+      if (shared && sharedMaps.get(url) === entry) sharedMaps.delete(url);
+      entry.texture?.dispose();
+      entry.texture = null;
+    };
+    if (shared) queueMicrotask(release); else release();
+  }
+  let released = false;
+  return { ready: entry.ready, release() {
+    if (released) return;
+    released = true;
+    entry.references--;
+    retire();
+  } };
+}
+
+/** Shared Earth visual infrastructure; motion remains owned by each theme. */
 export class EarthGlobe {
-  constructor(container, { loader = new THREE.TextureLoader() } = {}) {
+  constructor(container, { loader = sharedLoader, tilt = -23.44, initialRotation = 4.9, sunPosition = null } = {}) {
     this.disposed = false;
     this.loader = loader;
+    this.sunPosition = sunPosition;
+    this.sunWorldPosition = new THREE.Vector3();
+    this.leases = new Set();
+    this.textureLeases = new Map();
     this.surfaceDetail = "standard";
     this.effectiveSurfaceDetail = "standard";
     this.detailStatus = "Standard (4K)";
@@ -157,7 +203,7 @@ export class EarthGlobe {
     // Reveal the complete composition together, avoiding a patchwork of maps
     // arriving over several frames. Failed maps still have neutral fallbacks.
     this.group.visible = false;
-    this.group.rotation.z = THREE.MathUtils.degToRad(-23.44);
+    this.group.rotation.z = THREE.MathUtils.degToRad(tilt);
     container.add(this.group);
     this.uniforms = {
       sunDirection: { value: new THREE.Vector3(-0.85, 0.35, 0.65).normalize() },
@@ -178,7 +224,7 @@ export class EarthGlobe {
     this.surface = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS, 128, 96), material(SURFACE));
     this.clouds = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.003, 128, 96), material(CLOUDS, { transparent: true, depthWrite: false }));
     this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.018, 96, 64), material(ATMOSPHERE, { transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending }));
-    this.surface.rotation.y = this.clouds.rotation.y = 4.9;
+    this.surface.rotation.y = this.clouds.rotation.y = initialRotation;
     this.clouds.renderOrder = 1;
     this.atmosphere.renderOrder = 2;
     this.group.add(this.surface, this.clouds, this.atmosphere);
@@ -194,32 +240,38 @@ export class EarthGlobe {
           texture.needsUpdate = true;
         }
       }
-      this.getWorldCenter(this.uniforms.earthCenter.value);
+      this.syncLighting();
     };
-    this.ready = Promise.all(Object.keys(defaults).map((name) => new Promise((resolve) => {
+    this.ready = Promise.all(Object.keys(defaults).map((name) => {
       const extension = name === "normal" || name === "ocean" ? "png" : "jpg";
-      loader.load(`${import.meta.env.BASE_URL}textures/earth/${name}-4k.${extension}`, (texture) => {
-        if (this.disposed) { texture.dispose(); resolve(false); return; }
-        texture.colorSpace = name === "day" || name === "night" ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.minFilter = THREE.LinearMipmapLinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.needsUpdate = true;
+      const lease = acquireMap(loader, `${import.meta.env?.BASE_URL ?? "/"}textures/earth/${name}-4k.${extension}`);
+      this.leases.add(lease);
+      return lease.ready.then((texture) => {
+        if (this.disposed) return false;
+        if (!texture) {
+          this.leases.delete(lease);
+          lease.release();
+          this.loadErrors.push(name);
+          console.warn(`Earth: ${name} texture unavailable; neutral fallback retained.`);
+          return false;
+        }
+        if (!configuredMaps.has(texture)) {
+          texture.colorSpace = name === "day" || name === "night" ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.ClampToEdgeWrapping;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.needsUpdate = true;
+          configuredMaps.add(texture);
+        }
         const uniform = this.uniforms[name === "clouds" ? "cloudMap" : `${name}Map`];
-        this.textures.delete(uniform.value);
-        uniform.value.dispose();
+        this.releaseTexture(uniform.value);
         uniform.value = texture;
         this.textures.add(texture);
-        resolve(true);
-      }, undefined, () => {
-        if (!this.disposed) {
-          this.loadErrors.push(name);
-          console.warn(`OUR WORLD: ${name} texture unavailable; neutral fallback retained.`);
-        }
-        resolve(false);
+        this.textureLeases.set(texture, lease);
+        return true;
       });
-    })));
+    }));
     this.ready.then(() => { if (!this.disposed) this.group.visible = true; });
   }
 
@@ -254,44 +306,68 @@ export class EarthGlobe {
         }
         resolve(false);
       };
-      try {
-        this.loader.load(`${import.meta.env.BASE_URL}textures/earth/day-${detail === "high" ? "8k" : "4k"}.jpg`, (texture) => {
-          if (this.disposed || request !== this.detailRequest) { texture.dispose(); resolve(false); return; }
-          const width = detail === "high" ? 8192 : 4096;
-          if (texture.image?.width !== width || texture.image?.height !== width / 2) {
-            texture.dispose(); fail("Unexpected surface dimensions"); return;
-          }
+      const lease = acquireMap(this.loader, `${import.meta.env?.BASE_URL ?? "/"}textures/earth/day-${detail === "high" ? "8k" : "4k"}.jpg`);
+      this.leases.add(lease);
+      const abandon = () => { this.leases.delete(lease); lease.release(); };
+      lease.ready.then((texture) => {
+        if (this.disposed || request !== this.detailRequest) { abandon(); resolve(false); return; }
+        if (!texture) { abandon(); fail("Surface download failed"); return; }
+        const width = detail === "high" ? 8192 : 4096;
+        if (texture.image?.width !== width || texture.image?.height !== width / 2) {
+          abandon(); fail("Unexpected surface dimensions"); return;
+        }
+        if (!configuredMaps.has(texture)) {
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.wrapS = THREE.RepeatWrapping;
           texture.wrapT = THREE.ClampToEdgeWrapping;
           texture.minFilter = THREE.LinearMipmapLinearFilter;
           texture.magFilter = THREE.LinearFilter;
           texture.generateMipmaps = true;
-          texture.anisotropy = Math.min(8, renderer?.capabilities.getMaxAnisotropy() ?? 1);
           texture.needsUpdate = true;
-          try {
-            // Prepare on the existing renderer before releasing the known-good map.
-            renderer?.initTexture(texture);
-          } catch {
-            texture.dispose(); fail("Surface upload failed"); return;
-          }
-          const old = this.uniforms.dayMap.value;
-          this.uniforms.dayMap.value = texture;
-          this.textures.add(texture);
-          this.textures.delete(old);
-          old.dispose();
-          this.effectiveSurfaceDetail = detail;
-          this.detailStatus = detail === "high" ? "High (8K)" : "Standard (4K)";
-          resolve(true);
-        }, undefined, () => fail("Surface download failed"));
-      } catch {
-        fail("Surface loader failed");
-      }
+          configuredMaps.add(texture);
+        }
+        const anisotropy = Math.min(8, renderer?.capabilities.getMaxAnisotropy() ?? 1);
+        if (texture.anisotropy !== anisotropy) {
+          texture.anisotropy = anisotropy;
+          texture.needsUpdate = true;
+        }
+        try {
+          renderer?.initTexture(texture);
+        } catch {
+          abandon(); fail("Surface upload failed"); return;
+        }
+        const old = this.uniforms.dayMap.value;
+        this.uniforms.dayMap.value = texture;
+        this.textures.add(texture);
+        this.textureLeases.set(texture, lease);
+        this.releaseTexture(old);
+        this.effectiveSurfaceDetail = detail;
+        this.detailStatus = detail === "high" ? "High (8K)" : "Standard (4K)";
+        resolve(true);
+      });
     });
     this.detailLoading = load;
     const result = await load;
     if (this.detailLoading === load) this.detailLoading = null;
     return result;
+  }
+
+  releaseTexture(texture) {
+    const lease = this.textureLeases.get(texture);
+    if (lease) { this.leases.delete(lease); lease.release(); }
+    else texture.dispose();
+    this.textureLeases.delete(texture);
+    this.textures.delete(texture);
+  }
+
+  syncLighting() {
+    this.getWorldCenter(this.uniforms.earthCenter.value);
+    if (this.sunPosition) {
+      this.sunPosition(this.sunWorldPosition);
+      this.uniforms.sunDirection.value.copy(this.sunWorldPosition)
+        .sub(this.uniforms.earthCenter.value).normalize();
+    }
+    this.uniforms.cloudOffset.value = (this.clouds.rotation.y - this.surface.rotation.y) / TAU;
   }
 
   getWorldCenter(target) { return this.group.getWorldPosition(target); }
@@ -316,7 +392,8 @@ export class EarthGlobe {
       mesh.geometry.dispose();
       mesh.material.dispose();
     }
-    for (const texture of this.textures) texture.dispose();
-    this.textures.clear();
+    for (const texture of this.textures) this.releaseTexture(texture);
+    for (const lease of this.leases) lease.release();
+    this.leases.clear();
   }
 }

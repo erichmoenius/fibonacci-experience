@@ -8,6 +8,11 @@ import { ThemeManager } from '../src/engine/ThemeManager.js';
 import Gateway from '../src/systems/cinematic/Gateway.js';
 
 globalThis.window = { devicePixelRatio: 1 };
+// New local Earth maps need a deterministic loader in this DOM-free test.
+const textureLoad = THREE.TextureLoader.prototype.load;
+THREE.TextureLoader.prototype.load = function(url, success) {
+  success(new THREE.Texture({ width: 4096, height: 2048 }));
+};
 const originalLog = console.log; console.log = () => {};
 let checks = 0;
 function check(value, message) { assert.ok(value, message); checks++; }
@@ -150,12 +155,12 @@ birthManager.activeTheme.destroy();
 check(birthDirector.gateways.length === 0, 'Earth entered through Journey 2 unregisters on destruction');
 
 const checkpoint = '80c2757470e66a43e956178aa3629a077fb0bcdc';
-const protectedPaths = ['src/systems/cinematic', 'src/systems/PlanetaryFlight.js', 'src/systems/SolarSystem.js',
-  'src/themes/GalaxyTheme.js', 'src/themes/EnvironmentTheme.js', 'src/systems/EarthGlobe.js',
+const protectedPaths = ['src/systems/cinematic', 'src/systems/PlanetaryFlight.js',
+  'src/themes/GalaxyTheme.js', 'src/themes/EnvironmentTheme.js',
   'src/ui/ThemeFlightControls.js', 'src/themes/BaseTheme.js', 'public/textures', 'src/graphics',
   ':(exclude)src/systems/cinematic/GalaxyJourney.js', ':(exclude)src/systems/cinematic/EarthJourney.js',
   ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js'];
-check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'GREEN flight journey Earth visual and asset systems unchanged');
+check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'GREEN flight journey Theme 4 integration and assets unchanged; shared Earth/Solar visuals covered by Pass 5');
 const oldPlanetary = execFileSync('git', ['show', `${checkpoint}:src/themes/PlanetaryTheme.js`], { encoding: 'utf8' });
 const newPlanetary = readFileSync('src/themes/PlanetaryTheme.js', 'utf8');
 for (const method of ['getHomePose', 'getCameraFar', 'getEnvironment']) {
@@ -163,6 +168,7 @@ for (const method of ['getHomePose', 'getCameraFar', 'getEnvironment']) {
   check(get(oldPlanetary) === get(newPlanetary), `${method} unchanged`);
 }
 check(oldPlanetary.match(/const PLANETARY_FLIGHT_GUI = [\s\S]*?\n};/)[0] === newPlanetary.match(/const PLANETARY_FLIGHT_GUI = [\s\S]*?\n};/)[0], 'Planetary F schema unchanged');
+THREE.TextureLoader.prototype.load = textureLoad;
 delete globalThis.window;
 console.log = originalLog;
 console.log(`Planetary Earth gateway characterization: PASS (${checks} checks). No physical GREEN claim.`);

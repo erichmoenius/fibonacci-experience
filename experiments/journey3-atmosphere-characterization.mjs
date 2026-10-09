@@ -127,8 +127,8 @@ const stripped = cameraSource.replace(/    \/\/ Opt-in Journey 3 pose\.[\s\S]*? 
   '    if (this.approachActive)');
 check(stripped.replaceAll('\r\n', '\n') === baselineCamera.replaceAll('\r\n', '\n'), 'all non-descent camera code unchanged');
 const protectedPaths = ['src/systems/cinematic/GalaxyJourney.js', 'src/systems/cinematic/JourneyDirector.js',
-  'src/systems/cinematic/FreeFlight.js', 'src/themes', 'src/systems/PlanetaryFlight.js', 'src/systems/SolarSystem.js',
-  'src/systems/EarthGlobe.js', 'src/ui', 'src/graphics', 'public/textures'];
-check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'Journey 2, gateway, flight, F/G, renderer and Earth visuals untouched');
+  'src/systems/cinematic/FreeFlight.js', 'src/themes', 'src/systems/PlanetaryFlight.js',
+  'src/ui', 'src/graphics', 'public/textures'];
+check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'Journey 2, gateway, flight, F/G, renderer and assets untouched; shared Earth/Solar visuals covered by Pass 5');
 delete globalThis.document; console.log = originalLog;
 console.log(`Journey 3 atmosphere characterization: PASS (${checks} checks). No visual/FPS GREEN claim.`);

@@ -130,7 +130,7 @@ check(app.cameraDirector.position.equals(home.position) && journey.atmosphere.wh
 check(!app.transitSystem.active && !app.renderer.fades.some(([type]) => type === 'out'),
   'Journey 3 never starts wormhole transit or black fade');
 check(app.themeManager.activeTheme.flight.rmbMaxSpeed === 2.5, 'saved destination F restored');
-await Promise.resolve(); await Promise.resolve();
+await app.themeManager.activeTheme.earth.ready; await Promise.resolve();
 check(app.themeManager.activeTheme.earth.surfaceDetail === 'high', 'saved destination G requests existing High mode');
 for (let i = 0; i < 310 && app.journeyDirector.isActive(); i++) tick(app, 0.01);
 check(journey.completed && !app.journeyDirector.isActive() && !app.cameraDirector.journey && app.cameraDirector.freeFlight.active && app.cameraDirector.mode === CameraMode.EXPLORE, 'completion releases journey to normal exploration');

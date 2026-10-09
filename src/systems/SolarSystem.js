@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { EarthGlobe } from "./EarthGlobe.js";
 
 // Astronomical periods are data; geometry and simulation time are experience choices.
 export const SOLAR_PERIODS = Object.freeze({
@@ -39,25 +40,6 @@ function wrapLongitude(value) {
   return Math.atan2(Math.sin(value), Math.cos(value));
 }
 
-function landField(lon, lat) {
-  // Broad continent masses with a little coast irregularity, not a map asset.
-  const masses = [
-    [-1.75, 0.74, 0.58, 0.43, 1.0],
-    [-1.38, -0.35, 0.34, 0.63, 0.85],
-    [0.35, 0.74, 0.93, 0.35, 1.0],
-    [0.32, 0.03, 0.43, 0.63, 0.9],
-    [1.95, -0.55, 0.37, 0.27, 0.75],
-    [-0.72, 1.25, 0.32, 0.24, 0.8],
-  ];
-  let field = 0;
-  for (const [x, y, width, height, weight] of masses) {
-    const dx = wrapLongitude(lon - x) / width;
-    const dy = (lat - y) / height;
-    field = Math.max(field, weight * Math.exp(-1.4 * (dx * dx + dy * dy)));
-  }
-  return field + 0.065 * Math.sin(17 * lon + 8 * lat) * Math.sin(11 * lat - 5 * lon);
-}
-
 function makeTexture(width, height, sample) {
   const pixels = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {
@@ -74,32 +56,6 @@ function makeTexture(width, height, sample) {
   texture.wrapS = THREE.RepeatWrapping;
   texture.needsUpdate = true;
   return texture;
-}
-
-function earthTexture() {
-  return makeTexture(512, 256, (lon, lat) => {
-    const detail = Math.sin(23 * lon + 9 * lat) * Math.sin(19 * lat - 3 * lon);
-    const land = landField(lon, lat) > 0.31;
-    const ice = Math.abs(lat) > 1.36 + 0.08 * Math.sin(lon * 7);
-    if (ice) return [222, 235, 234, 255];
-    if (land) {
-      const dry = Math.sin(5 * lon - 3 * lat) + Math.cos(7 * lat + lon) > 0.45;
-      return dry
-        ? [119 + 12 * detail, 111 + 10 * detail, 77 + 8 * detail, 255]
-        : [56 + 14 * detail, 103 + 17 * detail, 72 + 8 * detail, 255];
-    }
-    return [12 + 5 * detail, 57 + 8 * detail, 115 + 17 * detail, 255];
-  });
-}
-
-function cloudTexture() {
-  return makeTexture(512, 256, (lon, lat) => {
-    const bands = Math.sin(13 * lon + 7 * Math.sin(5 * lat))
-      * Math.cos(21 * lat - 4 * lon);
-    const swirls = Math.sin(27 * lon - 13 * lat) * Math.cos(9 * lon + 23 * lat);
-    const opacity = Math.max(0, bands * 0.58 + swirls * 0.34 - 0.28);
-    return [235, 244, 250, Math.min(145, Math.round(opacity * 185))];
-  });
 }
 
 function moonTexture() {
@@ -212,30 +168,17 @@ export class SolarSystem {
     this.earthTilt = new THREE.Group();
     this.earthTilt.rotation.z = EARTH_TILT;
     this.earthSystem.add(this.earthTilt);
-    this.earth = new THREE.Mesh(sphere(SOLAR_DISPLAY.earthRadius), track(
-      new THREE.MeshStandardMaterial({ map: track(earthTexture()), roughness: 0.9 }),
-    ));
+    // Keep the original orbital/tilt hierarchy and simulation-owned spin.
+    // Gateway/Journey 3 continue targeting the visible solid mesh, not a group.
+    this.earthGlobe = new EarthGlobe(this.earthTilt, {
+      tilt: 0, initialRotation: 0,
+      sunPosition: (target) => this.getSunWorldPosition(target),
+    });
+    this.earthGlobe.group.name = "PlanetaryEarth";
+    this.earth = this.earthGlobe.surface;
     this.earth.name = "Earth";
-    this.earthTilt.add(this.earth);
-    this.clouds = new THREE.Mesh(sphere(SOLAR_DISPLAY.earthRadius * 1.012), track(
-      new THREE.MeshStandardMaterial({
-        map: track(cloudTexture()),
-        transparent: true,
-        depthWrite: false,
-        roughness: 1,
-      }),
-    ));
-    this.earthTilt.add(this.clouds);
-    const atmosphere = new THREE.Mesh(sphere(SOLAR_DISPLAY.earthRadius * 1.045), track(
-      new THREE.MeshBasicMaterial({
-        color: 0x6bb9ff,
-        transparent: true,
-        opacity: 0.14,
-        side: THREE.BackSide,
-        depthWrite: false,
-      }),
-    ));
-    this.earthSystem.add(atmosphere);
+    this.clouds = this.earthGlobe.clouds;
+    this.earthGlobe.syncLighting();
 
     this.moonOrbit = new THREE.Group();
     this.moonOrbit.rotation.y = -0.7;
@@ -323,9 +266,11 @@ export class SolarSystem {
     this.clouds.rotation.y += TAU * days * 24 / SOLAR_PERIODS.earthRotationHours * SOLAR_DISPLAY.visualSelfRotationScale * 0.94;
     this.moonOrbit.rotation.y += TAU * days / SOLAR_PERIODS.moonOrbitDays;
     this.sun.rotation.y += delta * 0.015;
+    this.earthGlobe.syncLighting();
   }
 
   dispose() {
+    this.earthGlobe.dispose();
     this.group.removeFromParent();
     for (const resource of this.resources) resource.dispose();
   }
