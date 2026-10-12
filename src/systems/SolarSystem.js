@@ -19,6 +19,16 @@ export const SOLAR_DISPLAY = Object.freeze({
   visualSelfRotationScale: 0.05,
 });
 
+// Audio-independent visual motion. Earth/Moon keep their established simulation.
+export const SOLAR_AMBIENT = Object.freeze({
+  sunRotationRadiansPerSecond: 0.025, // Slow existing-texture turn: about 1.43 degrees/s.
+  coronaBreathSeconds: 12,
+  coronaScaleAmount: 0.025, // +/- 2.5% around the existing 17-unit sprite.
+  coronaOpacityAmount: 0.04, // At most 4% dimmer than the existing material.
+  minimumOrbitRadiansPerSecond: 0.003, // Outer planets only; about 0.17 degrees/s.
+  minimumAxialRadiansPerSecond: 0.006, // Preserve spin direction; about 0.34 degrees/s.
+});
+
 // NASA planetary fact sheet values, rounded to useful precision. The signed
 // sidereal rotation period records retrograde rotation independently of tilt.
 // Display dimensions are deliberately compressed and remain separate below.
@@ -154,6 +164,11 @@ export class SolarSystem {
     })));
     corona.scale.set(17, 17, 1);
     this.sun.add(corona);
+    this.corona = corona;
+    this.ambientMotion = { ...SOLAR_AMBIENT };
+    this.ambientTime = 0;
+    this.coronaBaseScale = corona.scale.x;
+    this.coronaBaseOpacity = corona.material.opacity;
 
     this.sunLight = new THREE.PointLight(0xfff1d5, 2200, 0, 2);
     this.group.add(this.sunLight);
@@ -260,12 +275,31 @@ export class SolarSystem {
   update(delta) {
     const days = delta * SOLAR_DISPLAY.simulationDaysPerSecond;
     for (const { definition, orbit, body } of this.planets.values()) {
-      orbit.rotation.y += TAU * days / definition.orbitDays;
-      body.rotation.y += TAU * days * 24 / definition.rotationHours * SOLAR_DISPLAY.visualSelfRotationScale;
+      const orbitalRate = TAU * SOLAR_DISPLAY.simulationDaysPerSecond / definition.orbitDays;
+      const axialRate = TAU * SOLAR_DISPLAY.simulationDaysPerSecond * 24 / definition.rotationHours * SOLAR_DISPLAY.visualSelfRotationScale;
+      // Keep the interactive Earth path exact. Lift only visually imperceptible
+      // non-Earth rates; scientific period data and body/ring hierarchy stay intact.
+      const visualOrbitRate = definition.name === "Earth" ? orbitalRate
+        : Math.max(orbitalRate, Math.max(0, this.ambientMotion.minimumOrbitRadiansPerSecond));
+      const visualAxialRate = definition.name === "Earth" ? axialRate
+        : Math.sign(axialRate) * Math.max(Math.abs(axialRate), Math.max(0, this.ambientMotion.minimumAxialRadiansPerSecond));
+      if (definition.name === "Earth") {
+        orbit.rotation.y += TAU * days / definition.orbitDays;
+        body.rotation.y += TAU * days * 24 / definition.rotationHours * SOLAR_DISPLAY.visualSelfRotationScale;
+      } else {
+        orbit.rotation.y += delta * visualOrbitRate;
+        body.rotation.y += delta * visualAxialRate;
+      }
     }
     this.clouds.rotation.y += TAU * days * 24 / SOLAR_PERIODS.earthRotationHours * SOLAR_DISPLAY.visualSelfRotationScale * 0.94;
     this.moonOrbit.rotation.y += TAU * days / SOLAR_PERIODS.moonOrbitDays;
-    this.sun.rotation.y += delta * 0.015;
+    this.sun.rotation.y += delta * this.ambientMotion.sunRotationRadiansPerSecond;
+    this.ambientTime += delta;
+    const phase = TAU * this.ambientTime / Math.max(1, this.ambientMotion.coronaBreathSeconds);
+    const scaleAmount = THREE.MathUtils.clamp(this.ambientMotion.coronaScaleAmount, 0, 0.05);
+    const opacityAmount = THREE.MathUtils.clamp(this.ambientMotion.coronaOpacityAmount, 0, 0.1);
+    this.corona.scale.setScalar(this.coronaBaseScale * (1 + scaleAmount * Math.sin(phase)));
+    this.corona.material.opacity = this.coronaBaseOpacity * (1 - opacityAmount * (0.5 - 0.5 * Math.cos(phase)));
     this.earthGlobe.syncLighting();
   }
 

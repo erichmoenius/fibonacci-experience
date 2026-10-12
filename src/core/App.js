@@ -1,3 +1,4 @@
+import { SolarWaltz } from "../systems/cinematic/SolarWaltz.js";
 import * as THREE from "three";
 import Stats from "stats.js";
 import GUI from "lil-gui";
@@ -146,6 +147,7 @@ export class App {
         console.log("Journey 3 COMPLETE: OUR WORLD exploration");
       }
       this.cameraDirector.finishTravel(this.journeyDirector.getJourney()?.id !== "planetary-environment");
+      if (this.journeyDirector.getJourney()?.id === "galaxy-planetary") this.startSolarWaltz?.();
     };
 
     this.journeyDirector.onVoidStart = () => {
@@ -651,7 +653,46 @@ export class App {
     );
   }
 
+  startSolarWaltz() {
+    const theme = this.themeManager.activeTheme;
+    const sun = theme?.solarSystem?.sun;
+    if (this.solarWaltz || this.themeManager.activeThemeName !== "planetary" || !sun) return false;
+    const camera = this.cameraDirector.camera;
+    const position = camera.getWorldPosition(new THREE.Vector3());
+    const distance = Math.max(1, position.distanceTo(this.cameraDirector.currentTarget));
+    const lookTarget = position.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), distance);
+    this.solarWaltz = new SolarWaltz(sun, { position, lookTarget }, this.time);
+    this.solarWaltzTheme = theme;
+    this.resetAcceptanceClick();
+    this.disarmArmedInvitation();
+    this.cameraDirector.beginJourney(this.solarWaltz);
+    // Adopt exactly the rendered starting pose, including the last BIRTH frame.
+    this.cameraDirector.update(0);
+    return true;
+  }
+
+  updateSolarWaltz() {
+    if (!this.solarWaltz) return;
+    if (this.themeManager.activeTheme !== this.solarWaltzTheme) {
+      this.stopSolarWaltz();
+      return;
+    }
+    this.solarWaltz.update(this.time);
+  }
+
+  stopSolarWaltz() {
+    const waltz = this.solarWaltz;
+    if (!waltz) return;
+    if (!waltz.completed) waltz.cancel();
+    if (this.cameraDirector.journey === waltz) this.cameraDirector.finishTravel();
+    waltz.dispose();
+    this.solarWaltz = this.solarWaltzTheme = null;
+    this.resetAcceptanceClick();
+    this.disarmArmedInvitation();
+  }
+
   beginAcceptanceClick(event) {
+    if (this.solarWaltz) return;
     if (this.isGUIEvent(event) || event.button !== 0) return;
 
     this.acceptanceClick.pointerId = event.pointerId;
@@ -661,6 +702,7 @@ export class App {
   }
 
   acceptReadyProximityGateway(event) {
+    if (this.solarWaltz) return false;
     if (this.isGUIEvent(event)) return false;
     const journeyGateway = this.activeGateway;
 
@@ -788,6 +830,7 @@ export class App {
   }
 
   beginGatewayJourney(journeyGateway) {
+    if (this.solarWaltz) return false;
     const journey = journeyGateway.journey;
     const theme = this.themeManager.activeTheme;
 
@@ -904,6 +947,7 @@ export class App {
         }
 
         if (e.code === "Escape" && !e.repeat) {
+          this.stopSolarWaltz?.();
           if (this.journeyDirector.getJourney?.()?.id === "galaxy-planetary") {
             this.renderer.clearJourney2Dissolve?.();
             this.renderer.fadeIn(0);
@@ -943,6 +987,7 @@ export class App {
   }
 
   switchDevelopmentTheme(themeName) {
+    this.stopSolarWaltz?.();
     this.renderer.clearJourney2Dissolve?.();
     if (this.journeyDirector.getJourney?.()?.id === "planetary-environment") this.renderer.fadeIn(0.3);
     this.cameraDirector.cancel();
@@ -1238,7 +1283,9 @@ export class App {
     // Journey 3 clock/callbacks prepare this frame's state before its one camera
     // update. Other journeys preserve their established camera-first ordering.
     if (descentJourney) this.journeyDirector.update(this.cameraDirector.getPosition(), descentDelta);
+    this.updateSolarWaltz?.();
     this.cameraDirector.update(descentJourney?.completed ? 0 : journeyCameraDelta);
+    if (this.solarWaltz?.completed) this.stopSolarWaltz();
 
     this.exploreDirector.update(0.016);
 
