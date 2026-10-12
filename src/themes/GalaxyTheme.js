@@ -109,7 +109,7 @@ export class GalaxyTheme extends BaseTheme {
     const journey = this.journeyDirector?.getJourney();
     if (journey?.id === "galaxy-planetary" && !journey.cancelled && !journey.completed
       && journey.phase === "VOID") {
-      // End all moving visuals at VOID. Retain only black while the existing fade catches up.
+      // Stop tunnel movement; retain the transparent fractal/starfield bridge.
       this.fractalTransit?.holdVoid();
       this.clearHyperspace(true);
       return;

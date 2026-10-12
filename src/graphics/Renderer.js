@@ -1,3 +1,4 @@
+import { Journey2BirthComposite } from "../systems/transit/Journey2BirthComposite.js";
 import { JourneyBirthDissolve } from "../systems/cinematic/JourneyBirthDissolve.js";
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
@@ -201,6 +202,25 @@ export class Renderer {
     }
   }
 
+  captureJourney2Dissolve(journey) {
+    this.clearJourney2Dissolve();
+    const target = this.renderer.getRenderTarget();
+    const portalVisible = this.portal?.mesh.visible;
+    try {
+      // Capture the outgoing theme before ThemeManager destroys it.
+      this.render();
+      this.journey2Dissolve = new Journey2BirthComposite(this.renderer, journey);
+    } finally {
+      this.renderer.setRenderTarget(target);
+      if (this.portal) this.portal.mesh.visible = portalVisible;
+    }
+  }
+
+  clearJourney2Dissolve() {
+    this.journey2Dissolve?.dispose();
+    this.journey2Dissolve = null;
+  }
+
   setBloomEnabled(enabled) {
     this.bloomEnabled = Boolean(enabled) && this.bloomSettings.enabled;
   }
@@ -287,6 +307,8 @@ export class Renderer {
       this.bloomComposite.render(this.renderer);
       this.renderer.autoClear = autoClear;
     }
+    this.journey2Dissolve?.render(this.camera);
+    if (this.journey2Dissolve?.disposed) this.journey2Dissolve = null;
     this.journey3Dissolve?.render();
     if (this.journey3Dissolve?.disposed) this.journey3Dissolve = null;
   }

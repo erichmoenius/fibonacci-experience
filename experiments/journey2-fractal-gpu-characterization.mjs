@@ -13,8 +13,8 @@ import * as THREE from 'three';
 import {Journey2Fractal,JOURNEY2_FRACTAL} from '/Journey2Fractal.js';
 window.runFractal=()=>{
  let checks=0;const check=(v,m)=>{if(!v)throw Error(m);checks++;};
- const errors=[],renderer=new THREE.WebGLRenderer({antialias:false,preserveDrawingBuffer:true});
- renderer.setSize(320,180);renderer.setClearColor(0);
+ const errors=[],renderer=new THREE.WebGLRenderer({alpha:true,antialias:false,preserveDrawingBuffer:true});
+ renderer.setSize(320,180);renderer.setClearColor(0,0);
  renderer.debug.onShaderError=(gl,p,v,f)=>errors.push([gl.getProgramInfoLog(p),gl.getShaderInfoLog(v),gl.getShaderInfoLog(f)]);
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(60,16/9,.1,100);
  camera.position.set(13,5,9);camera.lookAt(3,8,-4);camera.updateMatrixWorld(true);
@@ -23,12 +23,12 @@ window.runFractal=()=>{
  const read=()=>{const gl=renderer.getContext(),data=new Uint8Array(320*180*4);gl.readPixels(0,0,320,180,gl.RGBA,gl.UNSIGNED_BYTE,data);return data;};
  for(const time of [0,.1,.35,1.7,3.5,5,5.4,5.7]){
   effect.update(time);renderer.render(scene,camera);const data=read();
-  let lit=0,cyan=0,violet=0,white=0,hash=0,max=0;
+  let lit=0,cyan=0,violet=0,white=0,hash=0,max=0,maxAlpha=0;
   for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2];
    if(Math.max(r,g,b)>45)lit++;if(b>80&&g>r*1.2)cyan++;if(b>80&&r>g*1.2)violet++;
-   if(Math.min(r,g,b)>230)white++;max=Math.max(max,r,g,b);hash=(Math.imul(hash,31)+r+3*g+7*b)|0;
+   maxAlpha=Math.max(maxAlpha,data[i+3]);if(Math.min(r,g,b)>230)white++;max=Math.max(max,r,g,b);hash=(Math.imul(hash,31)+r+3*g+7*b)|0;
   }
-  samples.push({time,lit,cyan,violet,white,hash,max,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
+  samples.push({time,lit,cyan,violet,white,hash,max,maxAlpha,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
  }
  check(errors.length===0,'actual GPU shader compiles');
  check(samples[0].calls===0,'no fractal draw before onset');
@@ -39,7 +39,8 @@ window.runFractal=()=>{
   check(s.calls===1&&s.triangles===2,'one quad, one GPU draw');
  }
  check(new Set(samples.filter(s=>s.time>=.35&&s.time<=5).map(s=>s.hash)).size===4,'zoom evolves throughout crescendo');
- check(samples.at(-1).max===0,'exact black at VOID boundary');
+ check(samples.at(-1).max>0,'luminous outer fragments survive VOID');
+ check(samples.every(s=>s.maxAlpha<=185),'normal-blended luminous coverage stays below 0.73');
  // Isolate one passing slice and measure actual rendered outward expansion.
  const originalSettings=effect.settings;
  effect.settings={...JOURNEY2_FRACTAL,recursion:1,streakStrength:0};
@@ -63,19 +64,23 @@ window.runFractal=()=>{
   effect.update(time);renderer.render(scene,camera);const data=read();let dark=0;
   for(let y=0;y<180;y++)for(let x=0;x<320;x++){
    const radius=Math.hypot(((x+.5)/320*2-1)*16/9,(y+.5)/180*2-1),i=(y*320+x)*4;
-   if(radius<.85&&Math.max(data[i],data[i+1],data[i+2])<30)dark++;
+   if(radius<.4&&data[i+3]===0)dark++;
   }return dark;
  };
- check(darkCenter(5.4)>darkCenter(5)*1.2,'collapse expands the central dark region');
+ check(darkCenter(5.65)>darkCenter(5)*1.2,'late phase expands the zero-alpha central opening');
  check(effect.uniforms.uAspect.value===16/9,'buffer aspect reaches shader');
- let firstBlack=JOURNEY2_FRACTAL.duration;
- for(let time=JOURNEY2_FRACTAL.duration-.25;time<=JOURNEY2_FRACTAL.duration+.0001;time+=.01){
-  effect.update(time);renderer.render(scene,camera);const data=read();
-  if(data.every((v,i)=>i%4===3||v===0)){firstBlack=time;break;}
- }
- const blackSeconds=.3+JOURNEY2_FRACTAL.duration-firstBlack;
- check(blackSeconds<=.4+1e-6,'fully black shader tail plus VOID stays below 0.4 seconds');
- effect.holdVoid();renderer.render(scene,camera);check(read().filter((v,i)=>i%4!==3&&v>0).length===0,'static VOID black stays black');
+ effect.holdVoid();renderer.render(scene,camera);const bridge=read();
+ check(bridge.some((v,i)=>i%4===3&&v>0),'VOID holds luminous transparent fragments');
+ check(bridge[centerIndex+3]===0,'central opening has zero alpha');
+ const starGeometry=new THREE.BufferGeometry();
+ starGeometry.setAttribute('position',new THREE.Float32BufferAttribute(camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(2)).toArray(),3));
+ const starMaterial=new THREE.PointsMaterial({color:0xaddcff,size:8,sizeAttenuation:false,depthTest:false});
+ const star=new THREE.Points(starGeometry,starMaterial);star.renderOrder=-1;scene.add(star);
+ effect.mesh.visible=false;renderer.render(scene,camera);const baseline=read();
+ effect.update(2.8);renderer.render(scene,camera);const through=read();
+ check(baseline[centerIndex+2]>100,'reference star is rendered');
+ check(through.slice(centerIndex,centerIndex+4).every((v,i)=>v===baseline[centerIndex+i]),'star is unchanged through the central opening');
+ scene.remove(star);starGeometry.dispose();starMaterial.dispose();
  renderer.setSize(180,320);effect.update(2);renderer.render(scene,camera);check(effect.uniforms.uAspect.value===180/320,'portrait resize updates aspect');
  check(JSON.stringify([camera.position.toArray(),camera.quaternion.toArray(),camera.fov])===cameraState,'camera unchanged');
  let geometryDisposals=0,materialDisposals=0;
@@ -85,7 +90,7 @@ window.runFractal=()=>{
  check(renderer.info.memory.geometries===0&&renderer.info.programs.length===0,'GPU resources released');
  const off=new Journey2Fractal({...JOURNEY2_FRACTAL,enabled:false});off.update(2);scene.add(off.mesh);renderer.render(scene,camera);
  check(renderer.info.render.calls===0,'disable switch suppresses effect');off.dispose();renderer.dispose();
- return {checks,errors,samples,outward,blackSeconds};
+ return {checks,errors,samples,outward};
 };
 </script></body></html>`;
 const routes={'/':()=>html,'/three.module.js':()=>readFileSync('node_modules/three/build/three.module.js'),'/three.core.js':()=>readFileSync('node_modules/three/build/three.core.js'),'/Journey2Fractal.js':()=>readFileSync('src/systems/transit/Journey2Fractal.js')};

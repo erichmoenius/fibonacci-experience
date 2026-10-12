@@ -111,6 +111,7 @@ try {
     probe.particles.geometry.attributes.position.setZ(0, -30);
     j.phaseTime = time;
     probe.update(0.1); // Caller delta must not override the Journey 2 clock.
+    check(!probe.shell.visible && !probe.endCap.visible, "Journey 2 dark enclosure disabled");
     const scale = 1 + 5 * (time / 5.7) ** 2;
     near(ring.position.z + 30, 0.016 * ring.userData.speed * scale, "ring acceleration follows phase clock");
     near(probe.particles.geometry.attributes.position.getZ(0) + 30, 0.016 * 9 * scale,
@@ -130,6 +131,7 @@ try {
   check(legacy.hyperspaceJourney === null, "Journey 1 cannot enable acceleration");
   const legacyRing = legacy.rings[0]; const oldZ = legacyRing.position.z;
   legacy.update(0.016);
+  check(legacy.shell.visible && legacy.endCap.visible === (legacy.visibility > 0.02), "Journey 1 enclosure keeps original visibility rule");
   near(legacyRing.position.z - oldZ, 0.016 * legacyRing.userData.speed, "Journey 1 ring speed unchanged");
   legacy.dispose();
 
@@ -147,7 +149,7 @@ try {
       check(Array.from(positions.array).every(Number.isFinite), "particle data remains finite");
     }
   }
-  check(f.theme.fractalTransit?.uniforms.uTime.value === 5.7, "VOID holds static black without moving fractals");
+  check(f.theme.fractalTransit?.uniforms.uTime.value === 5.7, "VOID holds the outgoing transparent fractal");
   check(f.journey.phase === "VOID", "existing VOID transition retained");
   check(!f.transitSystem.isActive() && object.parent === null, "VOID detaches and stops tunnel");
   check(disposed === resources.length && transit.resources.length === 0, "VOID disposes every resource once");

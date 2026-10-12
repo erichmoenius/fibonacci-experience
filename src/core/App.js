@@ -139,6 +139,7 @@ export class App {
     };
 
     this.journeyDirector.onJourneyFinished = () => {
+      if (this.journeyDirector.getJourney()?.id === "galaxy-planetary") this.renderer.clearJourney2Dissolve?.();
       console.log("🌌 EXPLORE");
 
       if (this.journeyDirector.getJourney()?.id === "planetary-environment") {
@@ -148,6 +149,7 @@ export class App {
     };
 
     this.journeyDirector.onVoidStart = () => {
+      if (this.journeyDirector.getJourney()?.id === "galaxy-planetary") return;
       if (this.journeyDirector.getJourney()?.id === "planetary-environment") {
         this.journeyDirector.getJourney().maskHandoff();
         return;
@@ -191,7 +193,11 @@ export class App {
         this.journeyDirector.activeJourneyTarget = null;
         this.journeyDirector.activeJourneyCrossing = null;
       }
+      const galaxyJourney = this.journeyDirector.getJourney()?.id === "galaxy-planetary"
+        ? this.journeyDirector.getJourney() : null;
+      if (galaxyJourney) this.renderer.captureJourney2Dissolve?.(galaxyJourney);
       this.themeManager.activate(destinationTheme);
+      if (galaxyJourney) this.renderer.journey2Dissolve?.setDestination(this.themeManager.activeTheme?.solarSystem?.sun);
       this.applyActiveThemeFlight();
       if (this.themeManager.activeTheme.earthGateway) {
         this.initializeActiveTheme();
@@ -223,7 +229,7 @@ export class App {
         }
       }
 
-      if (!earthJourney) this.renderer.fadeIn(this.journeyDirector.getJourney()?.birthFadeDuration ?? 3);
+      if (!earthJourney && !galaxyJourney) this.renderer.fadeIn(this.journeyDirector.getJourney()?.birthFadeDuration ?? 3);
     };
 
     console.log("🎬 Cinematic system initialized");
@@ -898,7 +904,10 @@ export class App {
         }
 
         if (e.code === "Escape" && !e.repeat) {
-          if (this.journeyDirector.getJourney?.()?.id === "galaxy-planetary") this.renderer.fadeIn(0.15);
+          if (this.journeyDirector.getJourney?.()?.id === "galaxy-planetary") {
+            this.renderer.clearJourney2Dissolve?.();
+            this.renderer.fadeIn(0);
+          }
           if (this.journeyDirector.getJourney?.()?.id === "planetary-environment") {
             console.log("Journey 3 CANCEL: ESC");
             this.cameraDirector.finishTravel();
@@ -934,6 +943,7 @@ export class App {
   }
 
   switchDevelopmentTheme(themeName) {
+    this.renderer.clearJourney2Dissolve?.();
     if (this.journeyDirector.getJourney?.()?.id === "planetary-environment") this.renderer.fadeIn(0.3);
     this.cameraDirector.cancel();
     this.cameraDirector.finishTravel();

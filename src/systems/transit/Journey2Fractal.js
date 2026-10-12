@@ -99,13 +99,15 @@ const fragmentShader = /* glsl */ `
     float streakPulse = pow(0.5 + 0.5 * sin(flow * 2.8 + sin(angle * 21.0)), 4.0);
     light += mix(cyan, violet, 0.25) * lane * streakPulse * uStreaks
       * (0.12 + pow(progress, 4.0) * 3.8) * smoothstep(0.1, 0.8, radius);
-    // The vanishing point expands past every corner as infinity swallows the view.
-    float swallowedRadius = 0.035 + pow(collapse, 2.4) * (length(vec2(uAspect, 1.0)) + 0.4);
+    // The transparent opening grows while the outer fractal survives the handoff.
+    float swallowedRadius = 0.035 + pow(collapse, 2.4) * 0.65;
     float aperture = smoothstep(swallowedRadius, swallowedRadius + 0.09, radius);
     light *= aperture * uIntensity * (0.4 + takeover * 0.6);
-    vec3 color = vec3(0.001, 0.002, 0.008) + 1.0 - exp(-light);
-    color *= 1.0 - collapse;
-    gl_FragColor = vec4(color, takeover);
+    vec3 color = 1.0 - exp(-light);
+    // Straight alpha, normal blending: zero light writes zero coverage.
+    // Even bright branches retain some visibility of the existing cosmic sky.
+    float coverage = min(0.72, 1.0 - exp(-max(light.r, max(light.g, light.b)) * 0.8));
+    gl_FragColor = vec4(color, coverage * takeover * (1.0 - collapse * 0.25));
     #include <colorspace_fragment>
   }
 `;
@@ -156,7 +158,7 @@ export class Journey2Fractal {
     this.mesh.visible = s.enabled && phaseTime >= 0.04;
   }
 
-  holdVoid() { this.update(this.settings.duration); } // Static black until the existing BIRTH handoff.
+  holdVoid() { this.update(this.settings.duration); } // Hold the transparent outgoing image until the existing BIRTH handoff.
 
   dispose() {
     if (this.disposed) return;

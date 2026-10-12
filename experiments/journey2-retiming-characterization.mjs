@@ -46,10 +46,12 @@ try{
   const galaxy=Object.create(GalaxyTheme.prototype);
   Object.assign(galaxy,{container,journeyDirector:jd,transitSystem:ts,
    galaxy:{update(){},destroy(){}},plasmaFilaments:{update(){},dispose(){}},cosmos:{dispose(){}},lastUpdateTime:null});
-  const planet={earthGateway:{},getHomePose:()=>({position:new THREE.Vector3(10,10,48),lookTarget:new THREE.Vector3(10,0,0)}),getGateways:()=>[]};
-  let births=0;const fades=[];
+  const planet={solarSystem:{sun:new THREE.Object3D()},earthGateway:{},getHomePose:()=>({position:new THREE.Vector3(10,10,48),lookTarget:new THREE.Vector3(10,0,0)}),getGateways:()=>[]};
+  let births=0,captures=0,destination=null;const fades=[];
   const app={cameraDirector:cd,journeyDirector:jd,transitSystem:ts,
-   renderer:{fadeOut:t=>fades.push(['out',t]),fadeIn:t=>fades.push(['in',t])},
+   renderer:{fadeOut:t=>fades.push(['out',t]),fadeIn:t=>fades.push(['in',t]),
+    captureJourney2Dissolve(j){check(app.themeManager.activeTheme===galaxy,'capture precedes source destruction');check(Math.abs(j.elapsed-10)<1e-8,'capture at 10-second handoff');captures++;this.journey2Dissolve={setDestination:sun=>{destination=sun;}};},
+    clearJourney2Dissolve(){this.journey2Dissolve=null;}},
    applyActiveThemeFlight(){},initializeActiveTheme(){},
    themeManager:{activeTheme:galaxy,themes:new Map([['planetary',planet]]),activate(){galaxy.destroy();this.activeTheme=planet;births++;}}};
   for(const name of ['onApproach','onHorizon','onSingularity','onTransit','onVoidStart','onBirth','onTransitEnd','onJourneyFinished'])jd[name]=callback(app,name);
@@ -60,7 +62,9 @@ try{
   check(Math.abs(time-12)<=1/fps+1e-6,'actual camera/callback flow completes in 12 seconds at '+fps);
   check(births===1,'one Planetary activation');check(cd.position.distanceTo(planet.getHomePose().position)<1e-8,'camera adopts Planetary endpoint');
   check(!ts.isActive()&&!galaxy.fractalTransit,'transit and blackout released');
-  check(JSON.stringify(fades)===JSON.stringify([['out',.15],['in',.35]]),'Journey 2-specific short fades');
+  check(fades.length===0,'Journey 2 creates no black DOM fade');
+  check(captures===1&&destination===planet.solarSystem.sun,'one capture binds the live Sun');
+  check(!app.renderer.journey2Dissolve,'completion clears composite');
   check(cd.approachDuration===3&&cd.horizonDuration===3&&cd.crossingDuration===4,'shared camera defaults never mutated');
   // A subsequent Journey 1 still gets its original three-second arrival flight.
   cd.journey={id:'engine'};check(cd.createFlight(planet.getHomePose()).duration===3,'Journey 1 arrival duration retained');

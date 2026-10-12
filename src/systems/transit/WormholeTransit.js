@@ -137,8 +137,11 @@ export default class WormholeTransit {
   }
 
   applyVisibility() {
+    // Journey 2 uses the cosmic sky, not Journey 1's dark enclosure.
+    const cosmic = Boolean(this.hyperspaceJourney);
+    this.shell.visible = !cosmic;
     this.shell.material.opacity = this.visibility;
-    this.endCap.visible = this.visibility > 0.02;
+    this.endCap.visible = !cosmic && this.visibility > 0.02;
 
     const visualScale = this.hyperspaceJourney?.minimizeTunnel ? 0.12 : 1;
     for (const ring of this.rings) {
