@@ -183,6 +183,7 @@ export class App {
         ? this.journeyDirector.getJourney() : null;
       if (earthJourney) {
         earthJourney.captureArrival();
+        earthJourney.birthDissolve = this.renderer.captureJourney3Dissolve?.(earthJourney.pose) ?? null;
         earthJourney.maskHandoff();
         // Release source-object camera references before disposing Planetary.
         this.cameraDirector.finishTravel();
@@ -214,6 +215,7 @@ export class App {
         if (earthJourney) {
           const earth = this.themeManager.activeTheme.earth;
           earthJourney.setArrivalPose(pose, earth?.ready, earth);
+          if (earthJourney.birthDissolve) earthJourney.birthDissolve.destination = earth;
           // The single camera update below establishes this pose while opaque.
           // No callback camera write or parallel destination flight during BIRTH.
         } else {
@@ -700,9 +702,7 @@ export class App {
 
     this.isBoosting = false;
     this.resetAcceptanceClick();
-    this.beginGatewayJourney(journeyGateway);
-
-    return true;
+    return this.beginGatewayJourney(journeyGateway) !== false;
   }
 
   trackAcceptanceMovement(event) {
@@ -784,6 +784,12 @@ export class App {
   beginGatewayJourney(journeyGateway) {
     const journey = journeyGateway.journey;
     const theme = this.themeManager.activeTheme;
+
+    if (journey.id === "planetary-environment" && this.renderer.canCaptureJourney3
+      && !this.renderer.canCaptureJourney3(theme?.solarSystem?.earthGlobe)) {
+      this.showNotification("Journey 3 requires loaded Earth textures. Please retry when Earth is ready.");
+      return false;
+    }
 
     if (
       journey.id === "engine" &&

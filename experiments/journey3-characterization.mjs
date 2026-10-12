@@ -157,13 +157,14 @@ check(current.id === old.id && JSON.stringify(oldEvents) === JSON.stringify(curr
 
 for (const cancelPhase of ['START', 'APPROACH', 'HORIZON', 'SINGULARITY', 'WORMHOLE', 'VOID', 'BIRTH']) {
   const cancelAfterBirth = cancelPhase === 'BIRTH';
-  const a = fixture(); a.acceptReadyProximityGateway(click); const active = a.journeyDirector.getJourney();
+  const a = fixture(); a.acceptReadyProximityGateway(click); const active = a.journeyDirector.getJourney(); const cancelledPlasma = active.plasma;
   if (cancelAfterBirth) for (let i = 0; i < 1800 && a.themeManager.activeThemeName !== 'environment'; i++) tick(a, 0.01);
   else { for (let i = 0; i < 1700 && active.phase !== cancelPhase; i++) tick(a, 0.01); }
   a.look.scale = 3.5;
   a.cameraDirector.freeFlight.pointer.active = true; a.cameraDirector.freeFlight.pointer.rmbActive = true;
   let keydown; window.addEventListener = (name, listener) => { if (name === 'keydown') keydown = listener; };
   method('setupThemeSwitching').call(a); keydown({ code: 'Escape', repeat: false });
+  check(active.plasma === null && cancelledPlasma.disposed && !cancelledPlasma.mesh.parent, 'actual ESC route removes plasma in every phase');
   check(active.cancelled && !a.journeyDirector.isActive() && a.cameraDirector.mode === CameraMode.RETURN && !a.transitSystem.active, 'ESC cancels and returns safely');
   check(!a.cameraDirector.journey && !a.cameraDirector.approachCoreObject && !a.cameraDirector.crossingCoreObject, 'ESC clears camera journey references');
   a.cameraDirector.finishReturn();
@@ -175,6 +176,15 @@ for (const cancelPhase of ['START', 'APPROACH', 'HORIZON', 'SINGULARITY', 'WORMH
   if (cancelAfterBirth) check(a.themeManager.activeTheme.earth.uniforms.sunDirection.value.equals(new THREE.Vector3(-0.85, 0.35, 0.65).normalize()), 'ESC restores temporary destination illumination');
   check(active.atmosphere.cleared && active.target === null && a.renderer.fadeOverlay.children.length === 0
     && a.renderer.fadeOverlay.style.opacity === '0', 'ESC clears all atmospheric effects and references');
+  a.themeManager.activeTheme.destroy();
+}
+for (const exitTime of [3.2, 8]) {
+  const a = fixture(); a.acceptReadyProximityGateway(click);
+  const journey = a.journeyDirector.getJourney(), plasma = journey.plasma;
+  for (let i=0;i<Math.ceil(exitTime*100);i++) tick(a,0.01);
+  method('switchDevelopmentTheme').call(a,'environment');
+  check(journey.cancelled && journey.plasma === null && plasma.disposed && !plasma.mesh.parent, 'actual manual theme exit disposes plasma during ignition/BIRTH');
+  check(!a.themeManager.container.getObjectByName('Journey3Plasma') && !a.journeyDirector.isActive(), 'theme exit leaves no visual ownership');
   a.themeManager.activeTheme.destroy();
 }
 const unavailable = fixture(); unavailable.themeManager.themes.delete('environment');

@@ -159,7 +159,7 @@ const protectedPaths = ['src/systems/cinematic', 'src/systems/PlanetaryFlight.js
   'src/themes/GalaxyTheme.js', 'src/themes/EnvironmentTheme.js',
   'src/ui/ThemeFlightControls.js', 'src/themes/BaseTheme.js', 'public/textures', 'src/graphics',
   ':(exclude)src/systems/cinematic/GalaxyJourney.js', ':(exclude)src/systems/cinematic/EarthJourney.js',
-  ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js'];
+  ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js', ':(exclude)src/systems/cinematic/JourneyPlasma.js'];
 check(execFileSync('git', ['diff', checkpoint, '--', ...protectedPaths], { encoding: 'utf8' }) === '', 'GREEN flight journey Theme 4 integration and assets unchanged; shared Earth/Solar visuals covered by Pass 5');
 const oldPlanetary = execFileSync('git', ['show', `${checkpoint}:src/themes/PlanetaryTheme.js`], { encoding: 'utf8' });
 const newPlanetary = readFileSync('src/themes/PlanetaryTheme.js', 'utf8');

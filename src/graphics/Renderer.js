@@ -1,3 +1,4 @@
+import { JourneyBirthDissolve } from "../systems/cinematic/JourneyBirthDissolve.js";
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { FullScreenQuad, Pass } from "three/addons/postprocessing/Pass.js";
@@ -168,6 +169,38 @@ export class Renderer {
     });
   }
 
+  canCaptureJourney3(earth) {
+    // Both themes use the same shared 4K leases. Require every source map settled
+    // before accepting this journey; destination construction then reuses them.
+    return Boolean(earth?.group.visible && earth.loadErrors.length === 0
+      && ["dayMap","nightMap","normalMap","oceanMap","cloudMap"].every(name => earth.uniforms[name]?.value?.image?.width > 1));
+  }
+
+  captureJourney3Dissolve(pose) {
+    this.journey3Dissolve?.dispose();
+    this.journey3Dissolve = null;
+    const mainCamera = this.camera;
+    const captureCamera = mainCamera.clone();
+    captureCamera.position.copy(pose.position);
+    captureCamera.lookAt(pose.lookTarget);
+    captureCamera.updateMatrixWorld(true);
+    const target = this.renderer.getRenderTarget();
+    const portalVisible = this.portal?.mesh.visible;
+    const bloomCamera = this.bloomCamera.clone();
+    try {
+      this.camera = captureCamera;
+      // Recapture the source at the boundary, including final selective bloom.
+      this.render();
+      this.journey3Dissolve = new JourneyBirthDissolve(this.renderer);
+      return this.journey3Dissolve;
+    } finally {
+      this.camera = mainCamera;
+      this.bloomCamera.copy(bloomCamera,false);
+      this.renderer.setRenderTarget(target);
+      if (this.portal) this.portal.mesh.visible = portalVisible;
+    }
+  }
+
   setBloomEnabled(enabled) {
     this.bloomEnabled = Boolean(enabled) && this.bloomSettings.enabled;
   }
@@ -246,13 +279,15 @@ export class Renderer {
 
     this.renderer.setRenderTarget(null);
     this.renderScene();
-    if (!this.bloomEnabled) return;
-
-    this.bloomComposer.render();
-    this.renderer.setRenderTarget(null);
-    const autoClear = this.renderer.autoClear;
-    this.renderer.autoClear = false;
-    this.bloomComposite.render(this.renderer);
-    this.renderer.autoClear = autoClear;
+    if (this.bloomEnabled) {
+      this.bloomComposer.render();
+      this.renderer.setRenderTarget(null);
+      const autoClear = this.renderer.autoClear;
+      this.renderer.autoClear = false;
+      this.bloomComposite.render(this.renderer);
+      this.renderer.autoClear = autoClear;
+    }
+    this.journey3Dissolve?.render();
+    if (this.journey3Dissolve?.disposed) this.journey3Dissolve = null;
   }
 }

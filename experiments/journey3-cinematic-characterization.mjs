@@ -79,7 +79,7 @@ try {
     }
   }
   const f = fixture(), j = f.journey;
-  for (const [time, haze, clouds, whiteout] of [[0, 0, 0, 0], [2, 0, 0, 0], [4.5, 1, 0, 0], [6.5, 1, 1, 1], [7.49, 1, 1, 1]]) {
+  for (const [time, haze, clouds, whiteout] of [[0, 0, 0, 0], [2, 0, 0, 0], [4.5, 0.3, 0, 0], [6.5, 0.3, 0, 0], [7.49, 0.3, 0, 1]]) {
     j.elapsed = time; j.updateAtmosphere();
     check(j.atmosphericState.haze === haze && j.atmosphericState.clouds === clouds && j.atmosphericState.whiteout === whiteout, 'existing layers map to creative boundaries');
   }
@@ -114,7 +114,7 @@ try {
     .replace(/        if \(earthJourney\) \{\n          const earth = this\.themeManager\.activeTheme\.earth;[\s\S]*?        \} else \{\n          this\.cameraDirector\.travel\(pose\);\n        \}/,
       '        // The destination jump is fully masked; reveal only its existing home.\n        earthJourney?.setArrivalPose(pose, this.themeManager.activeTheme.earth?.ready);\n        this.cameraDirector.travel(pose);');
   check(strippedApp === baseline('src/core/App.js'), 'App changes limited to Journey 3 measured clock and established BIRTH pose; Journey 2/gateway/storage unchanged');
-  check(execFileSync('git', ['diff', checkpoint, '--', 'src', 'public', ':(exclude)src/core/App.js', ':(exclude)src/systems/cinematic/EarthJourney.js', ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js'], { encoding: 'utf8' }) === '', 'all other rendering, effects, Journey 2, themes, flight, GUI and assets unchanged');
+  check(execFileSync('git', ['diff', checkpoint, '--', 'src', 'public', ':(exclude)src/core/App.js', ':(exclude)src/systems/cinematic/EarthJourney.js', ':(exclude)src/systems/cinematic/CameraDirector.js', ':(exclude)src/systems/cinematic/JourneyAtmosphere.js', ':(exclude)src/systems/cinematic/JourneyPlasma.js'], { encoding: 'utf8' }) === '', 'all other rendering, effects, Journey 2, themes, flight, GUI and assets unchanged');
 } finally {
   delete globalThis.document; console.log = originalLog;
 }

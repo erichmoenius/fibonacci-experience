@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { GalaxyJourney, GalaxyJourneyPhase } from "./GalaxyJourney.js";
-import { JourneyAtmosphere } from "./JourneyAtmosphere.js";
+import { JourneyAtmosphere, entryVeil } from "./JourneyAtmosphere.js";
+import { JourneySpatialClouds } from "./JourneySpatialClouds.js";
+import { JourneyPlasma } from "./JourneyPlasma.js";
 
 // Existing IDs/events, with Journey 3-only durations. Journey 2 is untouched.
 export const EARTH_PHASES = Object.freeze([
@@ -49,6 +51,9 @@ export class EarthJourney extends GalaxyJourney {
 
   prepareDescent(cameraDirector, target, overlay) {
     this.atmosphere?.clear();
+    this.plasma?.dispose();
+    this.plasma = new JourneyPlasma(target, { screenClouds: false });
+    this.spatialClouds?.dispose();
     this.target = target;
     target.geometry.computeBoundingSphere();
     this.localRadius = target.geometry.boundingSphere.radius;
@@ -68,6 +73,20 @@ export class EarthJourney extends GalaxyJourney {
     this.atmosphere = new JourneyAtmosphere(overlay);
     this.arrived = false;
     this.arrivalCaptured = false;
+    this.spatialClouds = new JourneySpatialClouds(target, [4.65, 5.1, 5.65].map(time => this.sampleCloudPath(time)), this.solidRadius);
+  }
+
+  sampleCloudPath(time) {
+    const elapsed = this.elapsed;
+    const position = this.pose.position.clone(), lookTarget = this.pose.lookTarget.clone();
+    try {
+      this.elapsed = time;
+      const pose = this.getAtmosphericPose();
+      return { position: pose.position.clone().sub(this.center), forward: pose.lookTarget.clone().sub(pose.position).normalize() };
+    } finally {
+      this.elapsed = elapsed;
+      this.pose.position.copy(position); this.pose.lookTarget.copy(lookTarget);
+    }
   }
 
   measureEarth() {
@@ -142,11 +161,14 @@ export class EarthJourney extends GalaxyJourney {
   }
 
   updateAtmosphere() {
+    this.birthDissolve?.update(this.elapsed);
+    this.spatialClouds?.update(this.elapsed);
+    this.plasma?.update(this.elapsed, descentEase(0, 6.5, this.elapsed));
     const state = this.atmosphericState;
     state.time = this.elapsed;
-    state.haze = descentEase(2, 4.5, this.elapsed);
-    state.clouds = descentEase(4.5, 6.5, this.elapsed);
-    state.whiteout = descentEase(6, 6.5, this.elapsed);
+    state.haze = descentEase(2, 4.5, this.elapsed) * 0.30;
+    state.clouds = descentEase(4.5, 4.85, this.elapsed) * (1 - descentEase(6.05, 6.5, this.elapsed));
+    state.whiteout = entryVeil(this.elapsed);
     state.reveal = this.phase === GalaxyJourneyPhase.BIRTH ? 1 - descentEase(0, 2.5, this.phaseTime) : 1;
     this.atmosphere?.update(state);
   }
@@ -199,7 +221,7 @@ export class EarthJourney extends GalaxyJourney {
     return this.pose;
   }
 
-  maskHandoff() { this.atmosphere?.obscure(); }
+  maskHandoff() { if (this.elapsed >= 7.38) this.atmosphere?.obscure(); }
 
   // Capture while Planetary is still attached: disposal removes its ancestors.
   captureArrival() {
@@ -249,6 +271,12 @@ export class EarthJourney extends GalaxyJourney {
   getExplorationPose() { return this.completed && this.arrived ? this.pose : null; }
 
   clearAtmosphere() {
+    this.spatialClouds?.dispose();
+    this.spatialClouds = null;
+    this.birthDissolve?.dispose();
+    this.birthDissolve = null;
+    this.plasma?.dispose();
+    this.plasma = null;
     this.atmosphere?.clear();
     this.target = null;
     if (this.arrivalEarth) this.arrivalEarth.uniforms.sunDirection.value.copy(this.homeSun);
