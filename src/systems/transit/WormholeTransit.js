@@ -17,6 +17,8 @@ export default class WormholeTransit {
     this.closingElapsed = 0;
     this.closingDuration = 1;
     this.visibility = 0;
+    this.hyperspaceJourney = null;
+    this.hyperspacePhaseTime = 0;
 
     this.createTunnelShell();
     this.createRings();
@@ -138,12 +140,13 @@ export default class WormholeTransit {
     this.shell.material.opacity = this.visibility;
     this.endCap.visible = this.visibility > 0.02;
 
+    const visualScale = this.hyperspaceJourney?.minimizeTunnel ? 0.12 : 1;
     for (const ring of this.rings) {
-      ring.material.opacity = ring.userData.baseOpacity * this.visibility;
+      ring.material.opacity = ring.userData.baseOpacity * this.visibility * visualScale;
     }
 
     this.particles.material.opacity =
-      this.particles.material.userData.baseOpacity * this.visibility;
+      this.particles.material.userData.baseOpacity * this.visibility * visualScale;
   }
 
   start({ position, forward } = {}) {
@@ -152,6 +155,13 @@ export default class WormholeTransit {
     this.setPose({ position, forward });
 
     console.log("🌀 Wormhole opening");
+  }
+
+  enableJourney2Hyperspace(journey, pose) {
+    if (journey?.id !== "galaxy-planetary") return;
+    this.hyperspaceJourney = journey;
+    this.hyperspacePhaseTime = journey.phaseTime;
+    this.setPose(pose);
   }
 
   close(duration = 1) {
@@ -166,6 +176,7 @@ export default class WormholeTransit {
   }
 
   dispose() {
+    this.hyperspaceJourney = null;
     this.group.clear();
     this.resources.forEach((resource) => resource.dispose());
     this.resources.length = 0;
@@ -173,6 +184,16 @@ export default class WormholeTransit {
   }
 
   update(delta) {
+    let speedScale = 1;
+    if (this.hyperspaceJourney) {
+      const journey = this.hyperspaceJourney;
+      if (journey.cancelled || journey.completed || journey.phase !== "WORMHOLE") return;
+      // Journey 2 owns the clock, including slow motion; Journey 1 keeps delta.
+      delta = Math.max(0, journey.phaseTime - this.hyperspacePhaseTime);
+      this.hyperspacePhaseTime = journey.phaseTime;
+      const progress = THREE.MathUtils.clamp(journey.phaseTime / (journey.wormholeDuration ?? 4), 0, 1);
+      speedScale = 1 + 5 * progress * progress;
+    }
     this.time += delta;
 
     if (this.state === TransitState.OPENING) {
@@ -197,14 +218,14 @@ export default class WormholeTransit {
     this.applyVisibility();
 
     for (const ring of this.rings) {
-      ring.position.z += delta * ring.userData.speed;
+      ring.position.z += delta * ring.userData.speed * speedScale;
       if (ring.position.z > 2) ring.position.z -= TUNNEL_LENGTH;
       ring.rotation.z += delta * ring.userData.spin;
     }
 
     const positions = this.particles.geometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
-      let z = positions.getZ(i) + delta * (9 + (i % 7) * 0.8);
+      let z = positions.getZ(i) + delta * (9 + (i % 7) * 0.8) * speedScale;
       if (z > 2) z -= TUNNEL_LENGTH;
       positions.setZ(i, z);
     }

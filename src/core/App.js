@@ -154,7 +154,7 @@ export class App {
       }
       console.log("🌑 VOID");
 
-      this.renderer.fadeOut(1);
+      this.renderer.fadeOut(this.journeyDirector.getJourney()?.voidFadeDuration ?? 1);
     };
 
     this.journeyDirector.onBirth = (destinationTheme) => {
@@ -223,7 +223,7 @@ export class App {
         }
       }
 
-      if (!earthJourney) this.renderer.fadeIn(3);
+      if (!earthJourney) this.renderer.fadeIn(this.journeyDirector.getJourney()?.birthFadeDuration ?? 3);
     };
 
     console.log("🎬 Cinematic system initialized");
@@ -898,6 +898,7 @@ export class App {
         }
 
         if (e.code === "Escape" && !e.repeat) {
+          if (this.journeyDirector.getJourney?.()?.id === "galaxy-planetary") this.renderer.fadeIn(0.15);
           if (this.journeyDirector.getJourney?.()?.id === "planetary-environment") {
             console.log("Journey 3 CANCEL: ESC");
             this.cameraDirector.finishTravel();
@@ -1214,7 +1215,7 @@ export class App {
     this.updateCamera();
 
     const activeJourney = this.journeyDirector.getJourney?.();
-    const descentDelta = activeJourney?.id === "planetary-environment"
+    const descentDelta = (activeJourney?.id === "planetary-environment" || activeJourney?.id === "galaxy-planetary")
       ? activeJourney.getFrameDelta?.(this.time) ?? 0.016 : 0.016;
     const journeyCameraDelta = this.journeyDirector.isActive()
       ? this.journeyDirector.getScaledDelta(descentDelta)

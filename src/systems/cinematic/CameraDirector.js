@@ -363,6 +363,8 @@ export default class CameraDirector {
 
   beginCoreHorizon(coreObject) {
     if (!coreObject?.getWorldPosition) return;
+    // Short Journey 2 phases can overlap a boundary frame; keep one path active.
+    if (this.journey?.cameraDurations) this.approachActive = false;
 
     this.approachCoreObject = coreObject;
     this.horizonElapsed = 0;
@@ -377,6 +379,7 @@ export default class CameraDirector {
 
     if (!target?.getWorldPosition || !direction) return;
 
+    if (this.journey?.cameraDurations) this.approachActive = this.horizonActive = false;
     this.crossingCoreObject = target;
     this.crossingElapsed = 0;
     this.crossingStartPosition.copy(this.position);
@@ -450,7 +453,7 @@ export default class CameraDirector {
     flight.startPose.copy(this.currentPose);
     flight.targetPose.copy(targetPose);
 
-    flight.duration = this.journey ? 3.0 : 2.0;
+    flight.duration = this.journey?.cameraDurations?.birth ?? (this.journey ? 3.0 : 2.0);
 
     return flight;
   }
@@ -628,12 +631,13 @@ export default class CameraDirector {
       return;
     }
     if (this.approachActive) {
+      const duration = this.journey?.cameraDurations?.approach ?? this.approachDuration;
       this.approachElapsed = Math.min(
         this.approachElapsed + delta,
-        this.approachDuration,
+        duration,
       );
 
-      const progress = this.approachElapsed / this.approachDuration;
+      const progress = this.approachElapsed / duration;
       const eased = progress * progress * (3 - 2 * progress);
 
       this.approachCoreObject.getWorldPosition(this.approachCorePosition);
@@ -670,12 +674,13 @@ export default class CameraDirector {
     }
 
     if (this.horizonActive) {
+      const duration = this.journey?.cameraDurations?.horizon ?? this.horizonDuration;
       this.horizonElapsed = Math.min(
         this.horizonElapsed + delta,
-        this.horizonDuration,
+        duration,
       );
 
-      const progress = this.horizonElapsed / this.horizonDuration;
+      const progress = this.horizonElapsed / duration;
       const eased = progress * progress * (3 - 2 * progress);
 
       this.approachCoreObject.getWorldPosition(this.horizonCorePosition);
@@ -711,12 +716,13 @@ export default class CameraDirector {
     }
 
     if (this.crossingActive) {
+      const duration = this.journey?.cameraDurations?.crossing ?? this.crossingDuration;
       this.crossingElapsed = Math.min(
         this.crossingElapsed + delta,
-        this.crossingDuration,
+        duration,
       );
 
-      const progress = this.crossingElapsed / this.crossingDuration;
+      const progress = this.crossingElapsed / duration;
       const eased = progress * progress * (3 - 2 * progress);
 
       this.crossingCoreObject.getWorldPosition(this.crossingCorePosition);

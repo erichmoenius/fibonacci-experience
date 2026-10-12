@@ -4,8 +4,9 @@ import { GalaxySystem } from "../systems/GalaxySystem.js";
 import { GalaxyFlight } from "../systems/GalaxyFlight.js";
 import { GalaxyCosmos } from "../systems/GalaxyCosmos.js";
 import { GalaxyPlasmaFilaments } from "../systems/GalaxyPlasmaFilaments.js";
+import { Journey2Fractal, JOURNEY2_FRACTAL } from "../systems/transit/Journey2Fractal.js";
 import Gateway from "../systems/cinematic/Gateway.js";
-import { GalaxyJourney } from "../systems/cinematic/GalaxyJourney.js";
+import { Journey2 } from "../systems/cinematic/Journey2.js";
 
 // Theme-owned schema and unsaved session values. Defaults come from this theme's
 // existing flight instance, before any saved or runtime tuning is applied.
@@ -67,7 +68,7 @@ export class GalaxyTheme extends BaseTheme {
 
     const gateway = new Gateway(
       new THREE.Vector3(),
-      2.5,
+      10,
       this.galaxy.specialStar,
     );
     gateway.acceptanceMode = "proximity-lmb";
@@ -79,7 +80,7 @@ export class GalaxyTheme extends BaseTheme {
       transitDistance: 2.5,
     };
     gateway.destinationTheme = "planetary";
-    gateway.journey = new GalaxyJourney();
+    gateway.journey = new Journey2();
     this.gateways.push(gateway);
 
     this.lastUpdateTime = null;
@@ -101,6 +102,62 @@ export class GalaxyTheme extends BaseTheme {
     this.lastUpdateTime = time;
     this.galaxy.update(delta);
     this.plasmaFilaments.update(state.audio, delta);
+    this.updateHyperspace();
+  }
+
+  updateHyperspace() {
+    const journey = this.journeyDirector?.getJourney();
+    if (journey?.id === "galaxy-planetary" && !journey.cancelled && !journey.completed
+      && journey.phase === "VOID") {
+      // End all moving visuals at VOID. Retain only black while the existing fade catches up.
+      this.fractalTransit?.holdVoid();
+      this.clearHyperspace(true);
+      return;
+    }
+    if (journey?.id !== "galaxy-planetary" || journey.cancelled || journey.completed
+      || journey.phase !== "WORMHOLE") {
+      this.clearHyperspace();
+      return;
+    }
+    const transit = this.transitSystem?.currentTransit;
+    const camera = this.journeyDirector.cameraDirector.camera;
+    if (!transit) return;
+    if (this.hyperspaceTransit === transit) {
+      this.fractalTransit?.update(journey.phaseTime);
+      return;
+    }
+    this.clearHyperspace();
+    // Capture the rendered crossing endpoint once; never move the camera.
+    journey.minimizeTunnel = JOURNEY2_FRACTAL.enabled;
+    transit.enableJourney2Hyperspace(journey, {
+      position: camera.getWorldPosition(new THREE.Vector3()),
+      forward: camera.getWorldDirection(new THREE.Vector3()),
+    });
+    // The theme container owns world visuals. attach preserves the world pose.
+    this.container.attach(transit.getObject());
+    this.hyperspaceTransit = transit;
+    if (JOURNEY2_FRACTAL.enabled) {
+      this.fractalTransit = new Journey2Fractal();
+      this.container.add(this.fractalTransit.mesh);
+      this.fractalTransit.update(journey.phaseTime);
+    }
+  }
+
+  clearHyperspace(keepBlackout = false) {
+    if (!keepBlackout) {
+      this.fractalTransit?.dispose();
+      this.fractalTransit = null;
+    }
+    const transit = this.hyperspaceTransit;
+    if (!transit) return;
+    this.hyperspaceTransit = null;
+    if (this.transitSystem.currentTransit === transit) {
+      this.transitSystem.stop();
+    } else {
+      transit.getObject().removeFromParent();
+      transit.stop();
+      transit.dispose();
+    }
   }
 
   handleInspectionWheel(event, camera, canvas) {
@@ -143,6 +200,7 @@ export class GalaxyTheme extends BaseTheme {
   }
 
   destroy() {
+    this.clearHyperspace();
     this.plasmaFilaments.dispose();
     this.cosmos.dispose();
     this.galaxy.destroy();
