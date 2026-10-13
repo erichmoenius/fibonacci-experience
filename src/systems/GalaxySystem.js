@@ -253,13 +253,13 @@ export class GalaxySystem {
     }
   }
 
-  update(delta) {
+  update(delta, journey = null) {
     this.innerGroup.rotation.y -= delta * 0.0272;
     this.spinGroup.rotation.y -= delta * 0.01496;
     this.outerGroup.rotation.y -= delta * 0.00748;
     this.haloGroup.rotation.y -= delta * 0.00136;
     this.body.update(this.spinGroup.rotation.y);
-    this.specialStar.update(delta);
+    this.specialStar.update(delta, journey);
   }
 
   destroy() {

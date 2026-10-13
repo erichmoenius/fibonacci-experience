@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { SunSurface } from "./SunSurface.js";
 
 function glowTexture() {
   const canvas = document.createElement("canvas");
@@ -54,9 +55,22 @@ export class GalaxySpecialStar {
 
     this.glowMap = glowTexture();
     this.glintMap = glintTexture();
-    this.coreGeometry = new THREE.SphereGeometry(0.14, 12, 8);
-    this.coreMaterial = new THREE.MeshBasicMaterial({ color: 0xfff8eb });
+    this.coreGeometry = new THREE.SphereGeometry(0.14, 128, 96);
+    this.coreMaterial = new SunSurface();
+    this.coreMaterial.uniforms.uGatewayReveal = { value: 0 };
+    this.coreMaterial.uniforms.uGatewayColor = { value: new THREE.Color(0xfff8eb) };
+    // Galaxy-only output blend. Leave SunSurface's source and all Planetary
+    // instances untouched; one mesh/program, no overlapping transition shells.
+    this.coreMaterial.onBeforeCompile = (shader) => {
+      shader.fragmentShader = 'uniform float uGatewayReveal;\nuniform vec3 uGatewayColor;\n' + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'gl_FragColor = vec4(color * uBrightness, 1.0);',
+        'gl_FragColor = vec4(mix(uGatewayColor, color * uBrightness, uGatewayReveal), 1.0);',
+      );
+    };
+    this.coreMaterial.customProgramCacheKey = () => 'galaxy-solar-reveal-t1';
     this.core = new THREE.Mesh(this.coreGeometry, this.coreMaterial);
+    this.core.onBeforeRender = () => this.syncSolarReveal();
     this.group.add(this.core);
 
     this.haloMaterial = new THREE.SpriteMaterial({
@@ -82,6 +96,27 @@ export class GalaxySpecialStar {
     this.glint = new THREE.Sprite(this.glintMaterial);
     this.glint.scale.set(5, 5, 1);
     this.group.add(this.glint);
+
+    // Keep distant navigation glows/sparkle; prevent their additive white
+    // centre from bleaching the shared solar surface during the close crossing.
+    this.haloBaseOpacity = this.haloMaterial.opacity;
+    this.glintBaseOpacity = this.glintMaterial.opacity;
+    this.closeupPosition = new THREE.Vector3();
+    this.closeupCamera = new THREE.Vector3();
+    this.closeupScale = new THREE.Vector3();
+    const glowVisibility = (renderer, scene, camera) => {
+      this.syncSolarReveal();
+      this.core.getWorldPosition(this.closeupPosition);
+      camera.getWorldPosition(this.closeupCamera);
+      this.core.getWorldScale(this.closeupScale);
+      const radius = 0.14 * Math.max(this.closeupScale.x, this.closeupScale.y, this.closeupScale.z);
+      const distance = this.closeupCamera.distanceTo(this.closeupPosition);
+      const closeup = THREE.MathUtils.smoothstep(distance, radius * 2, radius * 8);
+      const amount = THREE.MathUtils.lerp(1, closeup, this.coreMaterial.uniforms.uGatewayReveal.value);
+      this.haloMaterial.opacity = this.haloBaseOpacity * amount;
+      this.glintMaterial.opacity = this.glintBaseOpacity * amount;
+    };
+    this.halo.onBeforeRender = this.glint.onBeforeRender = glowVisibility;
 
     this.opticalScale = 1;
     this.opticalTargetScale = 1;
@@ -153,7 +188,16 @@ export class GalaxySpecialStar {
     this.opticalTargetScale = 1;
   }
 
-  update(delta) {
+  syncSolarReveal() {
+    const journey = this.solarJourney;
+    const accepted = journey && !journey.cancelled && !journey.completed;
+    const time = accepted ? Math.max(0, journey.elapsed) : 0;
+    this.coreMaterial.uniforms.uGatewayReveal.value = THREE.MathUtils.smoothstep(time, 0, 1.4);
+    this.coreMaterial.uniforms.uTime.value = accepted ? time : this.elapsed;
+  }
+
+  update(delta, journey = null) {
+    this.solarJourney = journey?.id === 'galaxy-planetary' ? journey : null;
     this.opticalScale = THREE.MathUtils.damp(this.opticalScale, this.opticalTargetScale, 10, Math.max(0, delta));
     if (Math.abs(this.opticalScale - this.opticalTargetScale) < 0.001) this.opticalScale = this.opticalTargetScale;
     // Scaling the child visuals leaves the arm position and gateway center intact.
@@ -180,11 +224,14 @@ export class GalaxySpecialStar {
       ? attack * decay * decay
       : 0;
     this.core.scale.setScalar(1 + 0.03 * breath + 0.08 * sparkle);
-    this.coreMaterial.color.setHex(0xfff8eb).lerp(this.sparkleTint, 0.35 * sparkle);
+    this.coreMaterial.uniforms.uGatewayColor.value.setHex(0xfff8eb).lerp(this.sparkleTint, 0.35 * sparkle);
+    this.syncSolarReveal();
     this.halo.scale.setScalar(1.55 * (1 + 0.03 * breath + 0.07 * sparkle));
     this.haloMaterial.opacity = 0.24 + 0.03 * breath + 0.16 * sparkle;
     this.glint.scale.setScalar(5 + 1.4 * sparkle);
     this.glintMaterial.opacity = 0.9 * this.sparkleStrength * sparkle;
+    this.haloBaseOpacity = this.haloMaterial.opacity;
+    this.glintBaseOpacity = this.glintMaterial.opacity;
   }
 
   getWorldPosition(target) {
@@ -193,6 +240,7 @@ export class GalaxySpecialStar {
   }
 
   dispose() {
+    this.solarJourney = null;
     this.group.removeFromParent();
     this.coreGeometry.dispose();
     this.coreMaterial.dispose();

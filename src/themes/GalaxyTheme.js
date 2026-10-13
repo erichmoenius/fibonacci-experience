@@ -100,7 +100,7 @@ export class GalaxyTheme extends BaseTheme {
       ? 0
       : Math.min(Math.max(time - this.lastUpdateTime, 0), 0.1);
     this.lastUpdateTime = time;
-    this.galaxy.update(delta);
+    this.galaxy.update(delta, this.journeyDirector?.getJourney());
     this.plasmaFilaments.update(state.audio, delta);
     this.updateHyperspace();
   }
