@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { EarthGlobe } from "./EarthGlobe.js";
+import { SunSurface } from "./SunSurface.js";
 
 // Astronomical periods are data; geometry and simulation time are experience choices.
 export const SOLAR_PERIODS = Object.freeze({
@@ -114,14 +115,6 @@ function planetTexture(appearance) {
   });
 }
 
-function sunTexture() {
-  return makeTexture(256, 128, (lon, lat) => {
-    const granules = Math.sin(35 * lon + 11 * lat) * Math.cos(27 * lat - 13 * lon);
-    const bands = Math.sin(8 * lat + 3 * Math.sin(9 * lon));
-    return [255, 218 + 12 * granules + 8 * bands, 130 + 18 * granules + 11 * bands, 255];
-  });
-}
-
 function coronaTexture() {
   const size = 128;
   const pixels = new Uint8Array(size * size * 4);
@@ -152,7 +145,7 @@ export class SolarSystem {
     const sphere = (radius) => track(new THREE.SphereGeometry(radius, 64, 40));
 
     this.sun = new THREE.Mesh(sphere(SOLAR_DISPLAY.sunRadius), track(
-      new THREE.MeshBasicMaterial({ map: track(sunTexture()), color: 0xfff5d8 }),
+      new SunSurface(),
     ));
     this.sun.name = "Sun";
     this.group.add(this.sun);
@@ -295,6 +288,7 @@ export class SolarSystem {
     this.moonOrbit.rotation.y += TAU * days / SOLAR_PERIODS.moonOrbitDays;
     this.sun.rotation.y += delta * this.ambientMotion.sunRotationRadiansPerSecond;
     this.ambientTime += delta;
+    this.sun.material.update(delta);
     const phase = TAU * this.ambientTime / Math.max(1, this.ambientMotion.coronaBreathSeconds);
     const scaleAmount = THREE.MathUtils.clamp(this.ambientMotion.coronaScaleAmount, 0, 0.05);
     const opacityAmount = THREE.MathUtils.clamp(this.ambientMotion.coronaOpacityAmount, 0, 0.1);

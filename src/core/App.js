@@ -899,7 +899,8 @@ export class App {
         console.log("Journey active:", this.journeyDirector.isActive());
 
         if (e.code === "KeyD" && !e.repeat) {
-          this.devHUD.toggle();
+          if (e.shiftKey) this.devHUD.toggleMode();
+          else this.devHUD.toggle();
         }
 
         if (import.meta.env.DEV && e.code === "KeyT" && !e.repeat) {
@@ -1045,6 +1046,7 @@ export class App {
 
   buildState() {
     const audio = this.audio.getState();
+    this.audioState = audio; // Reuse the existing sample for read-only diagnostics.
 
     // 🔥 DEBUG
     console.log(audio);
@@ -1285,6 +1287,7 @@ export class App {
     if (descentJourney) this.journeyDirector.update(this.cameraDirector.getPosition(), descentDelta);
     this.updateSolarWaltz?.();
     this.cameraDirector.update(descentJourney?.completed ? 0 : journeyCameraDelta);
+    this.journeyDirector.timeline?.samplePresentation(this.cameraDirector.journey);
     if (this.solarWaltz?.completed) this.stopSolarWaltz();
 
     this.exploreDirector.update(0.016);

@@ -1,12 +1,15 @@
-import * as THREE from "three";
+import { HUDTelemetry, cinematicSection } from "./DevHUDTelemetry.js";
+export { formatCinematicTime } from "./DevHUDTelemetry.js";
 
 export class DevHUD {
   constructor(app) {
     this.app = app;
     this.visible = false;
+    this.mode = "COMPACT";
     this.lastUpdate = 0;
-    this.coreWorldPosition = new THREE.Vector3();
-
+    this.lastText = "";
+    this.sections = [];
+    this.telemetry = new HUDTelemetry(app);
     this.element = document.createElement("pre");
     this.element.setAttribute("aria-hidden", "true");
     this.element.style.cssText = [
@@ -33,64 +36,41 @@ export class DevHUD {
   toggle() {
     this.visible = !this.visible;
     this.element.style.display = this.visible ? "block" : "none";
+    if (this.visible) this.update(true);
+  }
 
-    if (this.visible) {
-      this.lastUpdate = 0;
-      this.update(true);
-    }
+  toggleMode() {
+    this.mode = this.mode === "COMPACT" ? "FULL" : "COMPACT";
+    this.update(true);
   }
 
   update(force = false) {
     if (!this.visible) return;
-
-    const now = performance.now();
-    if (!force && now - this.lastUpdate < 200) return;
-
-    this.lastUpdate = now;
-
-    const { cameraDirector, journeyDirector, themeManager, armedGateway } =
-      this.app;
-    const themeName = themeManager.activeThemeName ?? "-";
-    const theme = themeManager.activeTheme;
-    const core = theme?.engine?.core?.object;
-
-    let coreDistance = "-";
-    if (core) {
-      core.getWorldPosition(this.coreWorldPosition);
-      coreDistance = cameraDirector.position
-        .distanceTo(this.coreWorldPosition)
-        .toFixed(2);
+    const now = performance.now(), full = this.mode === "FULL";
+    const theme = this.app.themeManager.activeTheme;
+    // Slow-changing readings/providers at 5 Hz; clocks remain frame-accurate.
+    if (force || theme !== this.lastTheme || now - this.lastUpdate >= 200) {
+      this.sections = this.telemetry.sections(full);
+      this.lastTheme = theme;
+      this.lastUpdate = now;
     }
-
-    const journey = journeyDirector.isActive()
-      ? journeyDirector.getPhase()
-      : "-";
-
-    const earthGateway = import.meta.env.DEV ? theme?.earthGateway : null;
-    const earthPosition = earthGateway?.resolvePosition();
-    this.element.textContent = [
-      "DEV HUD",
-      `Theme:        ${themeName.toUpperCase()}`,
-      `Camera:       ${cameraDirector.mode.toUpperCase()}`,
-      `FreeFlight:   ${cameraDirector.freeFlight.active ? "ON" : "OFF"}`,
-      `Core dist:    ${coreDistance}`,
-      `Gateway:      ${journeyDirector.gatewayReady ? "READY" : "-"}`,
-      `Armed:        ${armedGateway ? "YES" : "NO"}`,
-      `Journey:      ${journey}`,
-      ...(earthGateway ? [
-        `Earth gateway: ${journeyDirector.gateways.includes(earthGateway) ? "REGISTERED" : "-"}`,
-        `Earth world:   ${earthPosition.x.toFixed(2)}, ${earthPosition.y.toFixed(2)}, ${earthPosition.z.toFixed(2)}`,
-        `Earth distance: ${cameraDirector.position.distanceTo(earthPosition).toFixed(2)}`,
-        `Earth radius:  ${earthGateway.radius.toFixed(2)}`,
-        `Earth state:   ${earthGateway.enabled && earthGateway.contains(cameraDirector.position) ? "READY" : "NOT READY"}`,
-        `Earth intent:  ${earthGateway.intentCount}`,
-      ] : []),
-      ...(import.meta.env.DEV
-        ? [
-            `Journey ID: ${journeyDirector.getJourney()?.id ?? "-"}`,
-            `JOURNEY SLOW-MO: ${journeyDirector.isSlowMotionEnabled() ? "3x" : "OFF"}`,
-          ]
-        : []),
-    ].join("\n");
+    const sections = [...this.sections];
+    const cinematic = cinematicSection(this.app, full);
+    sections.splice(2, 0, cinematic);
+    const lines = [`DEV HUD — ${this.mode} (Shift+D: mode)`, cinematic.timecode];
+    for (const section of sections) {
+      const rows = section.rows.filter(r => r && typeof r.label === "string" && (full || !r.fullOnly));
+      if (!rows.length) continue;
+      lines.push(`[${section.title}]`);
+      for (const { label, value } of rows) {
+        const prefix = `${label}:`;
+        lines.push(`${prefix.padEnd(Math.max(14, prefix.length + 1))}${value ?? "-"}`);
+      }
+    }
+    const text = lines.join("\n");
+    if (text !== this.lastText) {
+      this.element.textContent = text;
+      this.lastText = text;
+    }
   }
 }

@@ -32,6 +32,29 @@ const PLANETARY_FLIGHT_GUI = {
 export class PlanetaryTheme extends BaseTheme {
   getFlightGUIConfig() { return PLANETARY_FLIGHT_GUI; }
 
+  getDevDiagnostics(context) {
+    const sun = this.solarSystem?.sun, gateway = this.earthGateway;
+    const rows = [
+      { label: "Sun", value: sun ? `ACTIVE / ${context.objectViewState(sun)}` : "INACTIVE" },
+      { label: "Sun clock", value: context.formatTime(sun?.material?.uniforms?.uTime?.value), fullOnly: true },
+    ];
+    if (gateway && import.meta.env.DEV) {
+      // Never call resolvePosition()/contains(): they update gateway caches.
+      const position = gateway.target ? context.worldPosition(gateway.target) : gateway.position;
+      const camera = context.cameraPosition;
+      const distance = Math.hypot(camera.x-position.x, camera.y-position.y, camera.z-position.z);
+      rows.push(
+        { label: "Earth gateway", value: context.isGatewayRegistered(gateway) ? "REGISTERED" : "-", fullOnly: true },
+        { label: "Earth world", value: [position.x, position.y, position.z].map(v => v.toFixed(2)).join(", "), fullOnly: true },
+        { label: "Earth distance", value: distance.toFixed(2), fullOnly: true },
+        { label: "Earth radius", value: gateway.radius.toFixed(2), fullOnly: true },
+        { label: "Earth state", value: gateway.enabled && distance <= gateway.radius ? "READY" : "NOT READY" },
+        { label: "Earth intent", value: gateway.intentCount, fullOnly: true },
+      );
+    }
+    return [{ title: "Planetary", rows }];
+  }
+
   constructor(container, gui) {
     super(container, gui);
     this.milkyWay = new PlanetaryMilkyWay(container);

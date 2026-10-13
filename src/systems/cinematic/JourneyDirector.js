@@ -22,6 +22,7 @@
 // =====================================================
 
 import { Journey } from "./Journey";
+import { CinematicTimeline } from "./CinematicTimeline.js";
 
 const NORMAL_TIME_SCALE = 1.0;
 const SLOW_MOTION_TIME_SCALE = 1 / 3;
@@ -33,6 +34,7 @@ export default class JourneyDirector {
     this.timeScale = NORMAL_TIME_SCALE;
 
     this.activeJourney = null;
+    this.timeline = new CinematicTimeline();
     this.activeJourneyTarget = null;
     this.activeJourneyCrossing = null;
     this.activeJourneyDestinationTheme = null;
@@ -95,6 +97,7 @@ export default class JourneyDirector {
     this.activeJourneyDestinationTheme = destinationTheme;
 
     this.activeJourney.onEvent = (event, data) => {
+      this.timeline.sampleJourney(this.activeJourney);
       if (event === "approach") {
         this.onApproach?.(this.activeJourneyTarget);
       }
@@ -123,6 +126,7 @@ export default class JourneyDirector {
         this.onTransitEnd?.();
 
         this.onJourneyFinished?.();
+        this.timeline.continueWith(this.cameraDirector.journey);
 
         this.activeJourney = null;
         this.activeJourneyTarget = null;
@@ -132,6 +136,7 @@ export default class JourneyDirector {
     };
 
     this.activeJourney.start();
+    this.timeline.start(this.activeJourney);
   }
 
   addGateway(gateway) {
@@ -139,6 +144,7 @@ export default class JourneyDirector {
   }
 
   stop() {
+    this.timeline.cancel();
     if (this.activeJourney) {
       this.activeJourney.cancel();
     }
@@ -219,6 +225,10 @@ export default class JourneyDirector {
 
     if (!this.activeJourney) return;
 
-    this.activeJourney.update(this.getScaledDelta(delta));
+    const journey = this.activeJourney;
+    const scaledDelta = this.getScaledDelta(delta);
+    this.timeline.advanceLegacy(journey, scaledDelta);
+    journey.update(scaledDelta);
+    this.timeline.sampleJourney(journey);
   }
 }

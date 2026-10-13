@@ -19,6 +19,13 @@ export class BaseTheme {
   disposeFlightGUI() { this.flightControls?.disposeGUI(); }
   updateFlightGUI() { this.flightControls?.updateDiagnostics(); }
 
+  // Optional synchronous, read-only HUD provider. Return sections shaped as:
+  // [{ title: "Section", rows: [{ label: "Value", value: "text", fullOnly: false }] }].
+  // Called only while the HUD is visible, at most 5 Hz except explicit refreshes.
+  // context supplies full, cameraPosition, formatTime, worldPosition(object),
+  // objectViewState(object), isGatewayRegistered(gateway). Do not mutate state.
+  getDevDiagnostics(_context) { return []; }
+
   init() {}
 
   update(state) {}
