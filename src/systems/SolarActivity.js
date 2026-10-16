@@ -69,7 +69,9 @@ float solarField(vec3 p){
           // move the limb itself; a second advected field folds the surface.
           float swell = solarField(vec3(direction * 2.2, t));
           float fold = solarField(vec3(direction * 4.2 + swell * 0.7, r * 5.0 - t * 1.4));
-          float detail = solarField(vec3(direction * 7.0 + fold * 0.6, r * 14.0 - t * 2.0));
+          // Cartesian advection breaks ray-aligned spokes without changing the limb deformation.
+          vec2 flowingUV = solarUV * 18.0 + vec2(fold * 0.6, swell * 0.45);
+          float detail = solarField(vec3(flowingUV + vec2(t * 0.25, -t * 0.18), r * 5.0 - t * 2.0));
           float edge = 0.29 + drive * 0.105 + swell * (0.025 + drive * 0.085);
           float width = 0.017 + drive * 0.025;
           float foldedRadius = r - edge + fold * (0.012 + drive * 0.025);
@@ -77,13 +79,16 @@ float solarField(vec3 p){
           float sheet = (1.0 - smoothstep(-width, width, foldedRadius))
             * smoothstep(0.19, 0.245, r);
           float tongues = smoothstep(-0.35, 0.30, swell + fold * 0.45);
+          // Continuous soft roots at the limb, separating into folds farther out.
+          tongues = mix(1.0, tongues, smoothstep(0.245, 0.31, r));
           float filaments = 0.30 + 0.70 * smoothstep(-0.35, 0.40, detail);
           float plasmaAlpha = drive * sheet * tongues * (0.12 + 0.12 * filaments);
           plasmaAlpha *= 1.0 - smoothstep(0.42, 0.49, r);
           float atmosphereAlpha = atmosphere.a * (1.0 - drive * 0.65);
           float totalAlpha = atmosphereAlpha + plasmaAlpha;
-          vec3 gold = vec3(1.0, 0.55, 0.10);
-          vec3 orange = vec3(1.0, 0.16, 0.015);
+          // Cleaner warm hues at approximately the previous palette luminance.
+          vec3 gold = vec3(1.0, 0.68, 0.20) * 0.86;
+          vec3 orange = vec3(1.0, 0.30, 0.04) * 0.763;
           vec3 plasmaColor = mix(orange, gold, smoothstep(-0.35, 0.40, detail + fold * 0.30));
           diffuseColor.rgb *= mix(atmosphere.rgb, plasmaColor,
             plasmaAlpha / max(totalAlpha, 0.0001));
@@ -91,7 +96,7 @@ float solarField(vec3 p){
         #endif
       `);
     };
-    corona.material.customProgramCacheKey = () => 'planetary-sun-a13-organic-corona';
+    corona.material.customProgramCacheKey = () => 'planetary-sun-a13-1-polished-corona';
     this.view = new THREE.Vector3();
     this.normal = new THREE.Vector3();
     this.tangent = new THREE.Vector3();
