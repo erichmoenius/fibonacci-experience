@@ -56,7 +56,7 @@ THREE.TextureLoader.prototype.load = function(url, onLoad) { onLoad(new THREE.Te
 let checks = 0; const check = (v, message) => { assert.ok(v, message); checks++; };
 function gui() {
   const root = { controllers: [], folders: [], addFolder(title) {
-    const folder = { title, controllers: [], add(object, property) {
+    const folder = { title, controllers: [], close() { return this; }, add(object, property) {
       const c = { object, property, label: property, name(name) { this.label = name; return this; }, listen() { return this; }, disable() { return this; }, onChange(fn) { this.change = fn; return this; }, updateDisplay() {} };
       this.controllers.push(c); return c;
     }, destroy() { root.folders = root.folders.filter(f => f !== this); } };

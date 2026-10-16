@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { EarthGlobe } from "./EarthGlobe.js";
 import { SunSurface } from "./SunSurface.js";
+import { SolarActivity } from "./SolarActivity.js";
 
 // Astronomical periods are data; geometry and simulation time are experience choices.
 export const SOLAR_PERIODS = Object.freeze({
@@ -162,6 +163,7 @@ export class SolarSystem {
     this.ambientTime = 0;
     this.coronaBaseScale = corona.scale.x;
     this.coronaBaseOpacity = corona.material.opacity;
+    this.solarActivity = new SolarActivity(this.sun, corona, SOLAR_DISPLAY.sunRadius);
 
     this.sunLight = new THREE.PointLight(0xfff1d5, 2200, 0, 2);
     this.group.add(this.sunLight);
@@ -265,7 +267,7 @@ export class SolarSystem {
     return this.sun.getWorldPosition(target);
   }
 
-  update(delta) {
+  update(delta, audio, camera, audioEnabled = true) {
     const days = delta * SOLAR_DISPLAY.simulationDaysPerSecond;
     for (const { definition, orbit, body } of this.planets.values()) {
       const orbitalRate = TAU * SOLAR_DISPLAY.simulationDaysPerSecond / definition.orbitDays;
@@ -294,10 +296,12 @@ export class SolarSystem {
     const opacityAmount = THREE.MathUtils.clamp(this.ambientMotion.coronaOpacityAmount, 0, 0.1);
     this.corona.scale.setScalar(this.coronaBaseScale * (1 + scaleAmount * Math.sin(phase)));
     this.corona.material.opacity = this.coronaBaseOpacity * (1 - opacityAmount * (0.5 - 0.5 * Math.cos(phase)));
+    this.solarActivity.update(delta, audio, camera, audioEnabled);
     this.earthGlobe.syncLighting();
   }
 
   dispose() {
+    this.solarActivity.dispose();
     this.earthGlobe.dispose();
     this.group.removeFromParent();
     for (const resource of this.resources) resource.dispose();

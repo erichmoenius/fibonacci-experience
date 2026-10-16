@@ -95,6 +95,10 @@ const STAR_CLUSTERS = Object.freeze([
   }),
 ]);
 
+// Stars A1: existing optical points only; no bloom seeds or catalog stars.
+const AUDIO_CHANNELS = Object.freeze([["energy", "uAudioEnergy"], ["high", "uAudioHigh"]]);
+const audioGain = (v) => v === undefined ? 1 : Number.isFinite(v) ? THREE.MathUtils.clamp(v, 0, 10) : 0;
+
 const BACKGROUND_JEWEL_COUNT = 35;
 const GENERATED_SPARKLE_COUNT = 84;
 const SPARKLING_JEWEL_COUNT = 18;
@@ -124,17 +128,23 @@ export class PlanetaryOpticalSky {
       redOrange: 0,
     };
     this.startedAt = performance.now();
+    this.lastAudioTime = null;
 
     const { geometry, bloomGeometry } = this.createGeometry();
     this.uniforms = {
       uPixelRatio: { value: 1 },
       uTime: { value: 0 },
+      uAudioEnergy: { value: 0 },
+      uAudioHigh: { value: 0 },
     };
     const material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: `
         uniform float uPixelRatio;
         uniform float uTime;
+        uniform float uAudioEnergy;
+        uniform float uAudioHigh;
+        attribute float aAudioWeight;
         attribute float aSize;
         attribute float aBrightness;
         attribute vec3 aStarColor;
@@ -147,6 +157,8 @@ export class PlanetaryOpticalSky {
         varying vec3 vStarColor;
         varying float vScintillation;
         varying float vGlintEligible;
+        varying float vAudioBoost;
+        varying float vFootprintScale;
 
         void main() {
           vBrightness = aBrightness;
@@ -159,7 +171,20 @@ export class PlanetaryOpticalSky {
           float variation = wave * 0.25 + elegantPeak * 0.75;
           vScintillation = 1.0
             + aScintillationEligible * aScintillationAmplitude * variation;
-          gl_PointSize = max(1.0, aSize * uPixelRatio);
+          // Different energy/high weighting per star; ambient twinkle stays intact.
+          float audioMix = 0.25 + 0.5 * fract(aPhase * 0.61803398875);
+          float audioDrive = mix(uAudioEnergy, uAudioHigh, audioMix);
+          float audioPeak = smoothstep(0.03, 0.75, 1.0 - exp(-4.0 * audioDrive));
+          vAudioBoost = aAudioWeight * 1.8 * audioPeak; // Brightness <= 2.8x ambient.
+          // Expand only the existing selected points; silence is exactly ambient.
+          // Per-star phase/weight/channel mix retain scattered responses.
+          float footprintDrive = smoothstep(0.02, 0.80, audioDrive);
+          float footprintPulse = aAudioWeight * footprintDrive
+            * (0.75 + 0.25 * sin(uTime * aSpeed + aPhase));
+          // Fivefold audio excursion; resting footprint and original core stay fixed.
+          float footprintScale = 1.0 + 6.0 * footprintPulse;
+          vFootprintScale = footprintScale;
+          gl_PointSize = max(1.0, aSize * uPixelRatio * footprintScale);
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -169,9 +194,13 @@ export class PlanetaryOpticalSky {
         varying vec3 vStarColor;
         varying float vScintillation;
         varying float vGlintEligible;
+        varying float vAudioBoost;
+        varying float vFootprintScale;
 
         void main() {
-          vec2 offset = gl_PointCoord - 0.5;
+          vec2 expandedOffset = gl_PointCoord - 0.5;
+          // Retain the original core radius; only a soft, low-radiance wing grows.
+          vec2 offset = expandedOffset * vFootprintScale;
           float radiusSquared = dot(offset, offset);
           float radius = sqrt(radiusSquared);
           float aperture = 1.0 - smoothstep(0.43, 0.50, radius);
@@ -193,10 +222,13 @@ export class PlanetaryOpticalSky {
             * (0.25 + vBrightness * 0.075);
           vec3 glintLight = vStarColor * glint * brightResponse
             * (0.55 + vBrightness * 0.1) * mix(1.0, vScintillation, 0.35);
-          vec3 light = (coreLight + innerLight + outerLight + glintLight) * aperture;
+          float wing = max(0.0, exp(-dot(expandedOffset, expandedOffset) * 26.0)
+            - innerHalo) * (1.0 - smoothstep(0.38, 0.50, length(expandedOffset)));
+          vec3 wingLight = vStarColor * wing * 0.16 * vAudioBoost / (1.0 + vAudioBoost);
+          vec3 light = (coreLight + innerLight + outerLight + glintLight) * aperture + wingLight;
           // AdditiveBlending normally multiplies RGB by source alpha. Keep alpha
           // fully open because the radial aperture is already applied to RGB.
-          gl_FragColor = vec4(light, 1.0);
+          gl_FragColor = vec4(light * (1.0 + vAudioBoost), 1.0);
           #include <colorspace_fragment>
         }
       `,
@@ -536,6 +568,20 @@ export class PlanetaryOpticalSky {
     this.sparklingJewelCount += selectedCatalogSparkles
       .filter(({ vertexIndex }) => glintEligibility[vertexIndex] === 1).length;
 
+    // Independent hashes preserve the existing generator sequence and scenery.
+    // Select 8% of all optical stars from legible points, excluding jewels/catalog.
+    const audioWeights = new Float32Array(sizes.length);
+    const audioCandidates = sizes
+      .map((size, vertexIndex) => ({ size, vertexIndex, rank: hashFraction(vertexIndex + 3571) }))
+      .filter(({ size, vertexIndex }) => size >= 2.4
+        && vertexIndex < PLANETARY_OPTICAL_SKY.generatedStarCount && !glintEligibility[vertexIndex])
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, Math.floor(sizes.length * 0.08));
+    for (const { vertexIndex } of audioCandidates) {
+      audioWeights[vertexIndex] = 0.65 + 0.35 * hashFraction(vertexIndex + 953);
+    }
+    this.audioStarCount = audioCandidates.length;
+
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("aSize", new THREE.Float32BufferAttribute(sizes, 1));
@@ -552,6 +598,7 @@ export class PlanetaryOpticalSky {
       new THREE.Float32BufferAttribute(scintillationEligibility, 1),
     );
     geometry.setAttribute("aGlintEligible", new THREE.Float32BufferAttribute(glintEligibility, 1));
+    geometry.setAttribute("aAudioWeight", new THREE.BufferAttribute(audioWeights, 1));
     geometry.computeBoundingSphere();
 
     const bloomIndices = glintEligibility
@@ -589,6 +636,36 @@ export class PlanetaryOpticalSky {
     this.catalogStarCount = catalogStars.length;
     this.totalStarCount = sizes.length;
     return { geometry, bloomGeometry };
+  }
+
+  // Called once per App frame, before the renderer's sky/main/bloom passes.
+  updateAudio(inputs, time, enabled = true, settings) {
+    if (!Number.isFinite(time)) return;
+    this.audioTraceUpdateCount = (this.audioTraceUpdateCount ?? 0) + 1;
+    this.audioTraceSettings = settings;
+    // Temporary A3 trace: record the actual receiver without another FFT read.
+    this.audioTraceInput = inputs;
+    this.audioTraceEnabled = enabled;
+    const delta = this.lastAudioTime === null ? 0
+      : THREE.MathUtils.clamp(time - this.lastAudioTime, 0, 0.1);
+    this.lastAudioTime = time;
+    for (const [channel, name] of AUDIO_CHANNELS) {
+      const value = inputs?.[channel];
+      const input = Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 0;
+      // Follow raw bands like Space plasma; preserve valleys before the shader curve.
+      const master = audioGain(settings?.masterGain);
+      this.audioTraceMaster = master;
+      const channelGain = audioGain(settings?.[channel === 'high' ? 'starHighGain' : 'starEnergyGain']);
+      const target = THREE.MathUtils.clamp(input * master * channelGain, 0, 1);
+      const uniform = this.uniforms[name];
+      // Fast high accents over a gentler energy envelope preserve scattered pulses.
+      const attack = channel === 'high' ? 0.015 : 0.035;
+      const release = channel === 'high' ? 0.10 : 0.16;
+      const rate = 1 / (target > uniform.value ? attack : release);
+      uniform.value = enabled && master > 0 && channelGain > 0
+        ? THREE.MathUtils.lerp(uniform.value, target, 1 - Math.exp(-delta * rate)) : 0;
+      if (target === 0 && uniform.value < 1e-5) uniform.value = 0;
+    }
   }
 
   setPixelRatio(pixelRatio) {

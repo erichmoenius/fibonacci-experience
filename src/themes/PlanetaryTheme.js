@@ -4,6 +4,7 @@ import { SolarSystem } from "../systems/SolarSystem.js";
 import { PlanetaryFlight } from "../systems/PlanetaryFlight.js";
 import { PlanetaryMilkyWay } from "../systems/PlanetaryMilkyWay.js";
 import { PlanetaryDeepSpace } from "../systems/PlanetaryDeepSpace.js";
+import { BlobAuraReferenceA12 } from "../systems/dev/BlobAuraReferenceA12.js";
 
 import { EarthJourney } from "../systems/cinematic/EarthJourney.js";
 import Gateway from "../systems/cinematic/Gateway.js";
@@ -29,6 +30,12 @@ const PLANETARY_FLIGHT_GUI = {
   ],
 };
 
+// Unsaved session controls, like the theme's flight runtime: survive theme
+// switches, reset on page reload. Both rendered systems read this same object.
+const PLANETARY_AUDIO_SETTINGS = {
+  masterGain: 1, coronaBassGain: 1, starHighGain: 1, starEnergyGain: 1,
+};
+
 export class PlanetaryTheme extends BaseTheme {
   getFlightGUIConfig() { return PLANETARY_FLIGHT_GUI; }
 
@@ -52,7 +59,12 @@ export class PlanetaryTheme extends BaseTheme {
         { label: "Earth intent", value: gateway.intentCount, fullOnly: true },
       );
     }
-    return [{ title: "Planetary", rows }];
+    return [
+      ...(import.meta.env.DEV && this.audioTraceA7Rows
+        ? [{ title: "Audio A7 · runtime truth", rows: this.audioTraceA7Rows }] : []),
+      { title: "Planetary", rows },
+      ...(import.meta.env.DEV && this.audioTraceRows
+        ? [{ title: "Audio A3 · same frame · B/M/H/E", rows: this.audioTraceRows.map(r => ({ ...r, fullOnly: Boolean(this.audioTraceA7Rows) })) }] : [])];
   }
 
   constructor(container, gui) {
@@ -60,6 +72,55 @@ export class PlanetaryTheme extends BaseTheme {
     this.milkyWay = new PlanetaryMilkyWay(container);
     this.deepSpace = new PlanetaryDeepSpace(container);
     this.solarSystem = new SolarSystem(container);
+    // TEMPORARY A12 comparison, DEV-only and excluded from cinematic states.
+    if (import.meta.env.DEV) this.blobAuraReference = new BlobAuraReferenceA12(container,
+      () => this.journeyDirector?.cameraDirector?.mode === "explore"
+        && !this.journeyDirector?.isActive() && !this.transitSystem?.active);
+    this.audioSettings = PLANETARY_AUDIO_SETTINGS;
+    this.solarSystem.solarActivity.audioSettings = this.audioSettings;
+    if (gui) {
+      this.audioFolder = gui.addFolder("Planetary Audio").close();
+      for (const [key, label] of [
+        ["masterGain", "Master Audio Gain"], ["coronaBassGain", "Corona Bass Gain"],
+        ["starHighGain", "Star High Gain"], ["starEnergyGain", "Star Energy Gain"],
+      ]) this.audioFolder.add(this.audioSettings, key, 0, 10, 0.1).name(label);
+      this.solarFolder = gui.addFolder("Sun · Audio activity");
+      const settings = this.solarSystem.solarActivity.settings;
+      this.solarFolder.add(settings, "response", 0, 1, 0.05).name("Audio response");
+      this.solarFolder.add(settings, "eruptions").name("Solar eruptions");
+      this.solarFolder.add(settings, "eruptionThreshold", 0.2, 0.7, 0.01).name("Eruption threshold");
+      // Read-only A1 trace; no second audio sample and no visual parameter changes.
+      const theme = this;
+      const bands = ["bass", "mid", "high", "energy"];
+      const format = (v) => Number.isFinite(v) ? v.toFixed(3) : "-";
+      const trace = {
+        get input() {
+          const audio = theme.solarAudioInput;
+          return bands.map(key => format(audio?.[key])).join(" / ")
+            + ` / K:${audio?.kick ? 1 : 0}`;
+        },
+        set input(_value) {},
+        get smoothed() {
+          const signals = theme.solarSystem.solarActivity.signals;
+          return bands.map(key => format(signals[key])).join(" / ");
+        },
+        set smoothed(_value) {},
+        get gate() {
+          return `J:${theme.journeyDirector?.isActive() ? 1 : 0}`
+            + ` T:${theme.transitSystem?.active ? 1 : 0}`
+            + ` gain:${format(settings.response)} dt:${format(theme.solarAudioDelta)}`;
+        },
+        set gate(_value) {},
+        get rotation() {
+          return `${format(THREE.MathUtils.radToDeg(theme.solarSystem.sun.rotation.y))} deg`;
+        },
+        set rotation(_value) {},
+      };
+      this.solarFolder.add(trace, "input").name("In B/M/H/E · Kick").listen().disable();
+      this.solarFolder.add(trace, "smoothed").name("Smoothed B/M/H/E").listen().disable();
+      this.solarFolder.add(trace, "gate").name("Journey / Transit / Gain / dt").listen().disable();
+      this.solarFolder.add(trace, "rotation").name("Sun local rotation Y").listen().disable();
+    }
     this.flight = new PlanetaryFlight(this.solarSystem);
     this.updateBeforeGatewayDetection = true;
     this.earthGateway = new Gateway(new THREE.Vector3(), PLANETARY_EARTH_GATEWAY_RADIUS, this.solarSystem.earth);
@@ -84,15 +145,24 @@ export class PlanetaryTheme extends BaseTheme {
   }
 
   update(state) {
+    this.audioTraceUpdateCount = (this.audioTraceUpdateCount ?? 0) + 1;
     const time = state.time;
     const delta = this.lastUpdateTime === null
       ? 0
       : Math.min(Math.max(time - this.lastUpdateTime, 0), 0.1);
     this.lastUpdateTime = time;
-    this.solarSystem.update(delta);
+    this.solarAudioInput = state.audio;
+    this.solarAudioDelta = delta;
+    // Journeys/BIRTH retain the natural S3 Sun. No audio enters a transition.
+    const audioEnabled = !this.journeyDirector?.isActive() && !this.transitSystem?.active;
+    this.solarSystem.update(delta, state.audio,
+      this.journeyDirector?.cameraDirector?.camera, audioEnabled);
+    if (import.meta.env.DEV) this.blobAuraReference?.update(state.audio, time);
   }
 
   getEnvironment() {
+    // Environment is evaluated after gateway/journey updates, before rendering.
+    if (import.meta.env.DEV) this.blobAuraReference?.syncVisibility();
     return { world: false, stars: false, portal: false, stage: true };
   }
 
@@ -121,9 +191,13 @@ export class PlanetaryTheme extends BaseTheme {
       this.journeyDirector.onGatewayReady?.(false, null);
     }
     this.gateways.length = 0;
+    this.audioTraceRelease?.();
+    if (import.meta.env.DEV) this.blobAuraReference?.destroy();
     this.deepSpace.dispose();
     this.milkyWay.dispose();
     this.solarSystem.dispose();
+    this.solarFolder?.destroy();
+    this.audioFolder?.destroy();
     if (this.backgroundParticleField) {
       this.backgroundParticleField.visible = this.backgroundParticleFieldWasVisible;
     }

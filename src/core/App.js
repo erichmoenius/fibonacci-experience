@@ -10,6 +10,7 @@ import { ThemeStage } from "../graphics/ThemeStage.js";
 
 import { Loop } from "./Loop.js";
 import { DevHUD } from "./DevHUD.js";
+import { capturePlanetaryAudioTrace } from "./PlanetaryAudioTrace.js";
 
 import { ScrollController } from "../engine/ScrollController.js";
 import { ThemeManager } from "../engine/ThemeManager.js";
@@ -1068,7 +1069,11 @@ export class App {
 
       wheel: this.wheel,
 
-      audio,
+      // Theme 3 follows the star path: unavailable input must not reuse FFT.
+      // Keep the raw AudioManager sample above for diagnostics/other themes.
+      audio: this.themeManager.activeThemeName === "planetary"
+        && (!this.audio.source || this.audio.audioContext?.state !== "running")
+        ? undefined : audio,
     };
   }
 
@@ -1089,6 +1094,15 @@ export class App {
     this.world.setActive(env.world ?? true);
 
     this.renderer.celestialStarfield.setTheme(this.themeManager.activeThemeName);
+    const planetarySky = this.renderer.celestialStarfield.planetaryOpticalSky;
+    if (planetarySky) {
+      // Reuse this frame's AudioManager sample. OFF ignores stale FFT values.
+      const starAudio = this.audio.source && this.audio.audioContext?.state === "running"
+        ? this.audioState : undefined;
+      planetarySky.updateAudio(starAudio, this.time,
+        !this.journeyDirector.isActive() && !this.transitSystem.active && !this.solarWaltz,
+        theme.audioSettings);
+    }
     this.renderer.setBloomEnabled(this.themeManager.activeThemeName === "planetary");
     // CelestialStarfield is only the distant sky. Themes may keep the legacy
     // local field in front of it; themes without the celestial sky retain the
@@ -1247,7 +1261,11 @@ export class App {
     // ⏱️ TIME
     // ------------------------------------------------
 
+    const previousFrameTime = this.time;
     this.time = performance.now() * 0.001;
+    // A7 metadata only; the existing simulation clock/deltas stay unchanged.
+    this.audioTraceDelta = this.audioTraceFrame === undefined ? 0 : this.time - previousFrameTime;
+    this.audioTraceFrame = (this.audioTraceFrame ?? 0) + 1;
 
     // ------------------------------------------------
     // 🧠 SYSTEMS
@@ -1307,6 +1325,7 @@ export class App {
     }
 
     this.themeManager.activeTheme?.updateFlightGUI();
+    if (import.meta.env.DEV && this.devHUD.visible) capturePlanetaryAudioTrace(this);
     this.devHUD.update();
 
     // ------------------------------------------------
