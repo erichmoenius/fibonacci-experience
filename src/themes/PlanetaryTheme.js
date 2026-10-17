@@ -157,6 +157,8 @@ export class PlanetaryTheme extends BaseTheme {
     const audioEnabled = !this.journeyDirector?.isActive() && !this.transitSystem?.active;
     this.solarSystem.update(delta, state.audio,
       this.journeyDirector?.cameraDirector?.camera, audioEnabled);
+    this.deepSpace.update(delta, state.audio,
+      audioEnabled && this.journeyDirector?.cameraDirector?.mode === "explore");
     if (import.meta.env.DEV) this.blobAuraReference?.update(state.audio, time);
   }
 

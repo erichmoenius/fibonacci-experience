@@ -256,6 +256,28 @@ export class PlanetaryDeepSpace {
       this.group.add(points);
       this.nebulae.push(points);
       this.resources.push(generated.geometry, material);
+      if (regionId === "a") {
+        // A14: only the cyan/blue cloud owns animated positions. Keep its
+        // seeded rest shape and every other cloud/dust/highlight untouched.
+        this.blueCloud = points;
+        this.blueCloudRest = generated.geometry.attributes.position.array.slice();
+        generated.geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+        generated.geometry.boundingSphere.radius += 12;
+        this.blueCloudDrive = 0;
+        this.blueCloudTime = 0;
+        this.blueCloudActive = false;
+      }
+      if (regionId === "b") {
+        // A15: independent red positions/envelope; reuse A14's rest-shape approach.
+        this.redCloud = points;
+        this.redCloudRest = generated.geometry.attributes.position.array.slice();
+        this.redCloudCenter = [...region.center];
+        generated.geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+        generated.geometry.boundingSphere.radius += 12;
+        this.redCloudDrive = 0;
+        this.redCloudTime = 0;
+        this.redCloudActive = false;
+      }
       this.regionInfo[regionId] = {
         center: [...region.center],
         dimensions: [...region.dimensions],
@@ -459,6 +481,93 @@ export class PlanetaryDeepSpace {
     geometry.setAttribute("aColor", new THREE.Float32BufferAttribute(colors, 3));
     geometry.computeBoundingSphere();
     return geometry;
+  }
+
+  update(delta, audio, enabled = true) {
+    this.updateRedCloud(delta, audio, enabled);
+    const position = this.blueCloud.geometry.attributes.position;
+    const rest = this.blueCloudRest;
+    // Keep cinematic states at the original seeded checkpoint appearance.
+    if (!enabled) {
+      if (this.blueCloudActive) {
+        position.array.set(rest);
+        position.needsUpdate = true;
+      }
+      this.blueCloudDrive = 0;
+      this.blueCloudTime = 0;
+      this.blueCloudActive = false;
+      return;
+    }
+    this.blueCloudActive = true;
+    const dt = Number.isFinite(delta) ? THREE.MathUtils.clamp(delta, 0, 0.1) : 0;
+    const unit = value => Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 0;
+    const target = 0.75 * unit(audio?.high) + 0.25 * unit(audio?.energy);
+    const rate = target > this.blueCloudDrive ? 1 / 0.035 : 1 / 0.45;
+    this.blueCloudDrive += (target - this.blueCloudDrive) * (1 - Math.exp(-dt * rate));
+    const drive = this.blueCloudDrive;
+    // Blob/Sun principle: advect a layered field using integrated time, so
+    // changes of musical speed never jump an absolute procedural clock.
+    this.blueCloudTime += dt * (0.16 + 2.4 * drive);
+    const t = this.blueCloudTime;
+    const amplitude = 0.35 + 6 * drive;
+    for (let i = 0; i < rest.length; i += 3) {
+      const x = rest[i] * 0.045, y = rest[i + 1] * 0.045, z = rest[i + 2] * 0.045;
+      const warp = Math.sin(x * 0.7 + z * 0.9 + t * 0.6);
+      // Coherent rolling folds plus finer turbulence at peaks. Spatial phases
+      // give local opposing motion instead of scaling the whole cloud.
+      position.array[i] = rest[i] + amplitude * (
+        0.72 * Math.sin(y + warp + t) + 0.28 * Math.sin(z * 3.1 - t * 2.7));
+      position.array[i + 1] = rest[i + 1] + amplitude * (
+        0.72 * Math.sin(z + warp - t * 0.83) + 0.28 * Math.sin(x * 2.8 + t * 3.1));
+      position.array[i + 2] = rest[i + 2] + amplitude * (
+        0.72 * Math.sin(x + warp + t * 0.71) + 0.28 * Math.sin(y * 3.3 - t * 2.3));
+    }
+    position.needsUpdate = true;
+  }
+
+  updateRedCloud(delta, audio, enabled) {
+    const position = this.redCloud.geometry.attributes.position;
+    const rest = this.redCloudRest;
+    if (!enabled) {
+      if (this.redCloudActive) {
+        position.array.set(rest);
+        position.needsUpdate = true;
+      }
+      this.redCloudDrive = 0;
+      this.redCloudTime = 0;
+      this.redCloudActive = false;
+      return;
+    }
+    this.redCloudActive = true;
+    const dt = Number.isFinite(delta) ? THREE.MathUtils.clamp(delta, 0, 0.1) : 0;
+    const unit = value => Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 0;
+    const target = 0.8 * unit(audio?.mid) + 0.2 * unit(audio?.energy);
+    const rate = target > this.redCloudDrive ? 1 / 0.12 : 1 / 0.9;
+    this.redCloudDrive += (target - this.redCloudDrive) * (1 - Math.exp(-dt * rate));
+    const drive = this.redCloudDrive;
+    // Slower integrated advection and broader folds than blue's high shimmer.
+    this.redCloudTime += dt * (0.1 + 0.95 * drive);
+    const t = this.redCloudTime;
+    const amplitude = 0.3 + 5.5 * drive;
+    const center = this.redCloudCenter;
+    for (let i = 0; i < rest.length; i += 3) {
+      const dx = rest[i] - center[0], dy = rest[i + 1] - center[1], dz = rest[i + 2] - center[2];
+      const x = dx * 0.035, y = dy * 0.035, z = dz * 0.035;
+      const warp = Math.sin(x * 0.8 + z * 0.6 + t * 0.45);
+      // Spatial breathing varies across the volume; bounded local components
+      // expand/contract gently without uniform scaling or accumulating drift.
+      const breath = drive * Math.sin(t * 0.85 + x * 0.55 - y * 0.4) * 0.035;
+      position.array[i] = rest[i] + amplitude * (
+        0.78 * Math.sin(y + warp + t * 0.8) + 0.22 * Math.sin(z * 1.7 - t * 0.65))
+        + 18 * Math.tanh(dx / 18) * breath;
+      position.array[i + 1] = rest[i + 1] + amplitude * (
+        0.78 * Math.sin(z + warp - t * 0.62) + 0.22 * Math.sin(x * 1.6 + t * 0.9))
+        + 14 * Math.tanh(dy / 14) * breath;
+      position.array[i + 2] = rest[i + 2] + amplitude * (
+        0.78 * Math.sin(x + warp + t * 0.57) + 0.22 * Math.sin(y * 1.9 - t * 0.7))
+        + 18 * Math.tanh(dz / 18) * breath;
+    }
+    position.needsUpdate = true;
   }
 
   dispose() {
