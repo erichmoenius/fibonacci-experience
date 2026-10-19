@@ -94,7 +94,7 @@ export class HUDTelemetry {
     const core = theme?.engine?.core?.object, p = cd.position;
     const corePosition = core ? this.worldPosition(core) : null;
     const sections = [
-      { title: "Theme", rows: [row("Theme", (app.themeManager.activeThemeName ?? "-").toUpperCase())] },
+      { title: "Theme", rows: [row("Theme", (theme?.displayName ?? app.themeManager.activeThemeName ?? "-").toUpperCase())] },
       { title: "Camera / FreeFlight", rows: [row("Camera", (cd.mode ?? "-").toUpperCase()), row("FreeFlight", cd.freeFlight?.active ? "ON" : "OFF"), row("Camera world", coord(p), true), row("Look target", coord(cd.currentTarget), true)] },
       { title: "Audio", rows: [row("Audio", audioState), row("Bass / Mid / High", sample ? `${fixed(sample.bass)} / ${fixed(sample.mid)} / ${fixed(sample.high)}` : "-", true), row("Energy / Kick", sample ? `${fixed(sample.energy)} / ${sample.kick ? "YES" : "NO"}` : "-", true)] },
       { title: "Interaction / Gateways", rows: [row("Gateway", app.journeyDirector?.gatewayReady ? "READY" : "-"), row("Armed", app.armedGateway ? "YES" : "NO"), row("Core dist", corePosition ? Math.hypot(p.x-corePosition.x, p.y-corePosition.y, p.z-corePosition.z).toFixed(2) : "-", !core), row("Gateway count", app.journeyDirector?.gateways?.length ?? 0, true)] },

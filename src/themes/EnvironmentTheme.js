@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { BaseTheme } from "./BaseTheme.js";
-import { EarthGlobe, EARTH_RADIUS } from "../systems/EarthGlobe.js";
+import { EarthGlobe } from "../systems/EarthGlobe.js";
+import { EarthSatellites, EARTH_WORLD_RADIUS } from "../systems/EarthSatellites.js";
 import { SphericalTravellerFlight } from "../systems/SphericalTravellerFlight.js";
 
 const ENVIRONMENT_FLIGHT = {
@@ -20,7 +21,7 @@ const ENVIRONMENT_FLIGHT = {
 // existing flight instance, before any saved or runtime tuning is applied.
 const ENVIRONMENT_FLIGHT_GUI = {
   id: "environment",
-  title: "Environment Flight Control",
+  title: "EARTH Flight Control",
   storageKey: "fibonacci-flight-v1-environment",
   runtime: null,
   controls: [
@@ -39,7 +40,9 @@ export class EnvironmentTheme extends BaseTheme {
 
   constructor(container, gui) {
     super(container, gui);
+    this.displayName = "EARTH";
     this.earth = new EarthGlobe(container);
+    this.satellites = new EarthSatellites(container);
     this.group = this.earth.group;
     // This folder belongs only to Theme 4 in the existing G Visual Lab.
     // Root G Save/Load already uses hero-core-gui-environment; F is independent.
@@ -79,6 +82,7 @@ export class EnvironmentTheme extends BaseTheme {
     const delta = this.lastUpdateTime === null ? 0 : time - this.lastUpdateTime;
     this.lastUpdateTime = time;
     this.earth.update(delta);
+    this.satellites.update(delta);
     this.earth.getWorldCenter(this.flight.orbitCenter);
   }
 
@@ -88,11 +92,11 @@ export class EnvironmentTheme extends BaseTheme {
 
   getHomePose() {
     const center = this.earth.getWorldCenter(new THREE.Vector3());
-    // Fit the entire atmosphere within the smaller viewport dimension at the
+    // Fit Earth, the satellite orbit and number badges within the smaller viewport dimension at the
     // shared 60-degree FOV, with room for the existing idle camera motion.
     const aspect = typeof window === "undefined" ? 1 : window.innerWidth / Math.max(window.innerHeight, 1);
     const halfFov = Math.atan(Math.tan(Math.PI / 6) * Math.min(Math.max(aspect, 0.1), 1));
-    const distance = Math.max(6.5, EARTH_RADIUS * 1.018 / Math.sin(halfFov) * 1.3);
+    const distance = Math.max(6.5, EARTH_WORLD_RADIUS / Math.sin(halfFov) * 1.3);
     return { position: center.clone().add(new THREE.Vector3(0, 0, distance)), lookTarget: center };
   }
 
@@ -100,6 +104,7 @@ export class EnvironmentTheme extends BaseTheme {
 
   destroy() {
     this.visualFolder?.destroy();
+    this.satellites.dispose();
     this.earth.dispose();
     if (this.backgroundParticleField) {
       this.backgroundParticleField.visible = this.backgroundParticleFieldWasVisible;
