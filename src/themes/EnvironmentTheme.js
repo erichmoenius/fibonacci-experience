@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { BaseTheme } from "./BaseTheme.js";
 import { EarthGlobe } from "../systems/EarthGlobe.js";
 import { EarthSatellites, EARTH_WORLD_RADIUS } from "../systems/EarthSatellites.js";
+import { EarthGalleryInteraction } from "../interactions/EarthGalleryInteraction.js";
 import { SphericalTravellerFlight } from "../systems/SphericalTravellerFlight.js";
 
 const ENVIRONMENT_FLIGHT = {
@@ -37,6 +38,12 @@ const ENVIRONMENT_FLIGHT_GUI = {
 
 export class EnvironmentTheme extends BaseTheme {
   getFlightGUIConfig() { return ENVIRONMENT_FLIGHT_GUI; }
+
+  initializeFlightControls(context) {
+    super.initializeFlightControls(context);
+    this.galleryInteraction?.dispose();
+    this.galleryInteraction = new EarthGalleryInteraction(this, context.cameraDirector);
+  }
 
   constructor(container, gui) {
     super(container, gui);
@@ -84,6 +91,7 @@ export class EnvironmentTheme extends BaseTheme {
     this.earth.update(delta);
     this.satellites.update(delta);
     this.earth.getWorldCenter(this.flight.orbitCenter);
+    this.galleryInteraction?.update();
   }
 
   getEnvironment() {
@@ -103,6 +111,7 @@ export class EnvironmentTheme extends BaseTheme {
   getGateways() { return []; }
 
   destroy() {
+    this.galleryInteraction?.dispose();
     this.visualFolder?.destroy();
     this.satellites.dispose();
     this.earth.dispose();
