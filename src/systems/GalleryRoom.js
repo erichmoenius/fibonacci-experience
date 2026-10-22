@@ -13,11 +13,14 @@ const BARS = {
 
 /** Reusable photo gallery with numbered loading/error placeholders. Its shell has no enclosing surface. */
 export class GalleryRoom {
-  constructor(container, { layout = "SPHERICAL", photoLoader = loadCityTexture } = {}) {
+  constructor(container, { layout = "SPHERICAL", content = "cities", id = "cities", name = "Cities", photoLoader = loadCityTexture } = {}) {
     if (layout !== "SPHERICAL") throw new Error("Unsupported gallery layout: " + layout);
+    if (!["cities", "placeholders"].includes(content)) throw new Error("Unsupported gallery content: " + content);
     this.layout = layout;
+    this.content = content;
+    this.id = id;
     this.group = new THREE.Group();
-    this.group.name = "CitiesGalleryRoom";
+    this.group.name = name + "GalleryRoom";
     this.group.visible = false;
     container.add(this.group);
     this.geometry = new THREE.BoxGeometry(1, 1, 1);
@@ -81,12 +84,21 @@ export class GalleryRoom {
       this.group.add(monitor);
       this.monitors.push(monitor);
     }
-    const photos = assignPhotos(this.monitors);
+    // Placeholder destinations share the same panel/layout machinery, but have
+    // no media requests, textures or lightbox-ready photo planes.
+    const photos = content === "cities" ? assignPhotos(this.monitors) : this.monitors.map((_, i) => ({
+      path: id + "/placeholder-" + (i + 1), width: 2, height: 1.2,
+    }));
     this.monitors.forEach((monitor, i) => {
       monitor.userData.photo = photos[i];
-      monitor.userData.photoStatus = "loading";
+      monitor.userData.photoStatus = content === "cities" ? "loading" : "placeholder";
+      if (content === "placeholders") monitor.name = name + " · Panel " + (i + 1);
     });
     layoutDenseGallery(this.monitors);
+    if (content === "placeholders") {
+      this.ready = Promise.resolve();
+      return;
+    }
     // One request, decode, texture and material per unique filename. Three
     // workers bound simultaneous original-image downloads and decodes.
     const queue = [...new Map(photos.map(photo => [photo.path, photo])).values()];

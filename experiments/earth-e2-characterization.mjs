@@ -263,7 +263,9 @@ try {
   theme.flight.rmbThrustVelocity = 0;
   for (const sphere of theme.satellites.satellites.slice(1)) {
     const e = eventAt(sphere); controller.down(e); controller.up({ ...e, buttons: 0, timeStamp: 100 });
-    check(!controller.opened, "satellites 2-6 inactive");
+    check(controller.opened && controller.activeGallery.config.number === sphere.userData.number
+      && controller.room.content === "placeholders", "satellites 2-6 open their own placeholder galleries");
+    controller.close();
   }
   const halo = eventAt(first, { clientX: eventAt(first).clientX + 16 });
   check(controller.hit(halo), "expanded target includes a 16-pixel near miss");

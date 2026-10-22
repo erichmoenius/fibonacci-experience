@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { EARTH_GALLERIES } from "../config/earthGalleries.js";
 import { GalleryRoom } from "../systems/GalleryRoom.js";
 import { GalleryLightbox } from "./GalleryLightbox.js";
 import { CitiesGalleryControls } from "../ui/CitiesGalleryControls.js";
@@ -11,7 +12,13 @@ export class EarthGalleryInteraction {
     this.canvas = cameraDirector.freeFlight.target;
     this.eventWindow = eventWindow;
     this.document = documentRoot;
-    this.layoutControls = new CitiesGalleryControls(theme.visualFolder?.parent, cameraDirector.camera);
+    // Bounded, theme-owned cache: one reusable room and settings object per
+    // destination, with one shared interaction/lightbox/camera lifecycle.
+    this.galleries = new Map(EARTH_GALLERIES.map(config => [config.number, {
+      config, room: null,
+      controls: new CitiesGalleryControls(theme.visualFolder?.parent, cameraDirector.camera, config),
+    }]));
+    this.activeGallery = this.galleries.get(1);
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
     this.listeners = [];
@@ -39,29 +46,46 @@ export class EarthGalleryInteraction {
     });
   }
 
+  get room() { return this.activeGallery.room; }
+  set room(room) { this.activeGallery.room = room; }
+  get layoutControls() { return this.activeGallery.controls; }
+
   hit(event) {
     if (event.target !== this.canvas) return false;
     const camera = this.director.camera;
     const bounds = this.canvas.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return false;
-    const center = this.theme.satellites.satellites[0].getWorldPosition(new THREE.Vector3());
     camera.updateWorldMatrix(true, false);
-    const projected = center.clone().project(camera);
-    if (projected.z < -1 || projected.z > 1) return false;
+    this.theme.satellites.group.updateWorldMatrix(true, true);
+    this.theme.earth.surface.updateWorldMatrix(true, false);
     this.pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1,
       -(event.clientY - bounds.top) / bounds.height * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, camera);
-    // At least 20 pixels, with a modest world-space halo for nearby viewing.
-    const distance = center.distanceTo(camera.position);
-    const radius = Math.max(0.6, distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 20 / bounds.height);
-    const hit = this.raycaster.ray.intersectSphere(new THREE.Sphere(center, radius), new THREE.Vector3());
-    if (!hit) return false;
     const obstruction = this.raycaster.intersectObject(this.theme.earth.surface, false)[0];
-    if (obstruction && obstruction.distance < hit.distanceTo(camera.position)) return false;
-    // A halo must never turn a different numbered satellite into a target.
-    if (this.theme.satellites.satellites.slice(1).some(sphere =>
-      this.raycaster.intersectObject(sphere, false).length || this.raycaster.intersectObject(sphere.children[0], false).length)) return false;
-    return true;
+    const satellites = this.theme.satellites.satellites;
+    // Actual spheres and number badges take priority over neighbouring halos.
+    const direct = this.raycaster.intersectObjects(satellites, true)[0];
+    if (direct) {
+      if (obstruction && obstruction.distance < direct.distance) return false;
+      const sphere = direct.object.isSprite ? direct.object.parent : direct.object;
+      return this.galleries.has(sphere.userData.number) ? sphere.userData.number : false;
+    }
+    const targets = [];
+    for (const sphere of satellites) {
+      const center = sphere.getWorldPosition(new THREE.Vector3());
+      const projected = center.clone().project(camera);
+      if (projected.z < -1 || projected.z > 1) continue;
+      // Preserve Cities' 20-pixel / 0.6-world-unit entry halo for every destination.
+      const distance = center.distanceTo(camera.position);
+      const radius = Math.max(0.6, distance * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 20 / bounds.height);
+      const point = this.raycaster.ray.intersectSphere(new THREE.Sphere(center, radius), new THREE.Vector3());
+      if (!point) continue;
+      const hitDistance = point.distanceTo(camera.position);
+      if (obstruction && obstruction.distance < hitDistance) continue;
+      targets.push({ number: sphere.userData.number, distance: hitDistance });
+    }
+    targets.sort((a, b) => a.distance - b.distance);
+    return targets[0]?.number ?? false;
   }
 
   down(event) {
@@ -82,9 +106,10 @@ export class EarthGalleryInteraction {
     const flight = this.director.freeFlight;
     if (this.director.mode !== "explore" || this.director.isInJourney() || event.button !== 0 || event.buttons !== 1
       || flight.pointer.active || flight.pointer.rmbActive || flight.pointer.dragging
-      || Math.hypot(this.theme.flight.rmbThrustVelocity, this.theme.flight.rmbStrafeVelocity) > 0.02
-      || !this.hit(event)) return;
-    this.click = { id: event.pointerId, x: event.clientX, y: event.clientY,
+      || Math.hypot(this.theme.flight.rmbThrustVelocity, this.theme.flight.rmbStrafeVelocity) > 0.02) return;
+    const satellite = this.hit(event);
+    if (!satellite) return;
+    this.click = { satellite, id: event.pointerId, x: event.clientX, y: event.clientY,
       time: event.timeStamp, position: this.director.position.clone(), moved: false };
   }
 
@@ -129,17 +154,20 @@ export class EarthGalleryInteraction {
       || event.timeStamp - click.time > 350
       || Math.hypot(event.clientX - click.x, event.clientY - click.y) >= Math.min(6, this.director.freeFlight.dragThreshold)
       || this.director.position.distanceTo(click.position) > 0.08
-      || this.director.mode !== "explore" || this.director.isInJourney() || !this.hit(event)) return;
+      || this.director.mode !== "explore" || this.director.isInJourney() || this.hit(event) !== click.satellite) return;
     event.preventDefault();
-    this.open();
+    this.open(click.satellite);
   }
 
-  open() {
+  open(number = 1) {
     if (this.opened || this.disposed || !this.theme.earth.group.visible || this.director.mode !== "explore" || this.director.isInJourney()) return false;
+    const gallery = this.galleries.get(number);
+    if (!gallery) return false;
     const forward = this.director.camera.getWorldDirection(new THREE.Vector3());
     this.savedPose = { position: this.director.position.clone(),
       lookTarget: this.director.position.clone().addScaledVector(forward, 10) };
-    this.room ??= new GalleryRoom(this.theme.container);
+    gallery.room ??= new GalleryRoom(this.theme.container, gallery.config);
+    this.activeGallery = gallery;
     this.room.place(this.savedPose.position, forward);
     this.savedVisibility = [this.theme.earth.group.visible, this.theme.satellites.group.visible];
     this.theme.earth.group.visible = this.theme.satellites.group.visible = false;
@@ -194,8 +222,8 @@ export class EarthGalleryInteraction {
 
   showControls() {
     const root = this.document.createElement("div");
-    root.dataset.earthGallery = "cities";
-    root.setAttribute("role", "region"); root.setAttribute("aria-label", "CITIES spherical gallery");
+    root.dataset.earthGallery = this.activeGallery.config.id;
+    root.setAttribute("role", "region"); root.setAttribute("aria-label", this.activeGallery.config.name.toUpperCase() + " spherical gallery");
     root.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid #456176;border-radius:12px;background:#08121fea;color:#edf7ff;font:14px system-ui;max-width:calc(100vw - 24px);box-sizing:border-box;flex-wrap:wrap;justify-content:center";
     for (const name of ["pointerdown", "pointerup", "pointermove", "click", "wheel"]) root.addEventListener(name, event => event.stopPropagation());
     const button = (text, action) => {
@@ -205,7 +233,8 @@ export class EarthGalleryInteraction {
       element.addEventListener("click", action); root.appendChild(element); return element;
     };
     const hint = this.document.createElement("span");
-    hint.textContent = "CITIES · Drag to look · Click a photo to enlarge";
+    hint.textContent = this.activeGallery.config.name.toUpperCase() + " · Drag to look"
+      + (this.activeGallery.config.content === "cities" ? " · Click a photo to enlarge" : " · Numbered placeholders");
     root.appendChild(hint);
     this.back = button("Back to Earth", () => this.close());
     this.controls = root;
@@ -264,7 +293,7 @@ export class EarthGalleryInteraction {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.layoutControls.dispose();
+    this.galleries.forEach(gallery => gallery.controls.dispose());
     this.closeLightbox({ restoreFocus: false });
     this.endLook();
     this.restoreInspectionSettings();
@@ -272,7 +301,7 @@ export class EarthGalleryInteraction {
     this.controls?.remove();
     this.listeners.forEach(([name, handler]) => this.eventWindow.removeEventListener(name, handler, true));
     this.listeners.length = 0;
-    this.room?.dispose();
+    this.galleries.forEach(gallery => gallery.room?.dispose());
     this.click = null;
   }
 }

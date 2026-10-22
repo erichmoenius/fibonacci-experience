@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve, dirname, extname } from "node:path";
 import * as THREE from "three";
+import GUI, { Controller } from "lil-gui";
+import { CitiesGalleryControls } from "../src/ui/CitiesGalleryControls.js";
 import { OBB } from "three/addons/math/OBB.js";
 import { EnvironmentTheme } from "../src/themes/EnvironmentTheme.js";
 import { GalleryRoom } from "../src/systems/GalleryRoom.js";
 
-import { measureMosaic, setMosaicGap } from "../src/systems/GalleryLayout.js";
+import { measureMosaic, setMosaicGap, setMosaicRadius } from "../src/systems/GalleryLayout.js";
 
 const cache = new Map();
 async function moduleURL(path) {
@@ -54,29 +56,27 @@ const check = (condition, text) => { assert.ok(condition, text); checks++; };
 class GuiController {
   constructor(gui, object, property, min, max, step) {
     Object.assign(this, { gui, object, property, min, max, step });
-    this.domElement = {}; this.label = property;
+    this.domElement = {}; this.label = this._name = property;
   }
-  name(label) { this.label = label; return this; }
+  name(label) { this.label = this._name = label; return this; }
   onChange(callback) { this.callback = callback; return this; }
+  getValue() { return this.object[this.property]; }
+  _callOnChange() { this.callback?.(this.getValue()); }
+  _callOnFinishChange() {}
+  save() { return Controller.prototype.save.call(this); }
+  load(value) { return Controller.prototype.load.call(this,value); }
   disable() { this.disabled = true; return this; }
   updateDisplay() { this.displayed = this.object[this.property]; return this; }
-  setValue(value) { this.object[this.property] = value; this.callback?.(value); return this; }
+  setValue(value) { return Controller.prototype.setValue.call(this,value); }
 }
 class Gui {
-  constructor(parent = null, title = "G") { Object.assign(this, { parent, title, folders: [], controllers: [], hidden: false }); }
+  constructor(parent = null, title = "G") { Object.assign(this, { parent, title, _title: title, folders: [], controllers: [], hidden: false }); }
   addFolder(title) { const folder = new Gui(this, title); this.folders.push(folder); return folder; }
   add(...args) { const controller = new GuiController(this, ...args); this.controllers.push(controller); return controller; }
   open() { this.opened = true; return this; }
   show(visible = true) { this.hidden = !visible; return this; }
-  save() {
-    return { controllers: Object.fromEntries(this.controllers.filter(c => typeof c.object[c.property] !== "function")
-      .map(c => [c.label, c.object[c.property]])), folders: Object.fromEntries(this.folders.map(f => [f.title, f.save()])) };
-  }
-  load(values) {
-    for (const controller of this.controllers) if (controller.label in (values.controllers || {})) controller.setValue(values.controllers[controller.label]);
-    for (const folder of this.folders) if (folder.title in (values.folders || {})) folder.load(values.folders[folder.title]);
-    return this;
-  }
+  save(...args) { return GUI.prototype.save.apply(this, args); }
+  load(...args) { return GUI.prototype.load.apply(this, args); }
   destroy() { this.destroyed = true; if (this.parent) this.parent.folders = this.parent.folders.filter(f => f !== this); }
 }
 try {
@@ -93,7 +93,7 @@ try {
   theme.initializeFlightControls({ cameraDirector: director });
   const controller = theme.galleryInteraction;
   const tuning = controller.layoutControls;
-  check(gui.folders.length === 1, "gallery folder is not exposed before entering Cities");
+  check(gui.folders.length === 7 && tuning.folder.hidden, "gallery folder registers before first entry for Settings Load, initially hidden");
   let loads = 0;
   const room = new GalleryRoom(container, { photoLoader: async () => { loads++; return new THREE.Texture({close() {}}); } });
   await room.ready;
@@ -222,20 +222,93 @@ try {
 
   };
   assertFrameClearance();
-  const saved = gui.save();
-  check(Object.keys(saved.folders["Gallery / Cities"].controllers).length===0&&saved.controllers.Unrelated===17,
-    "root Save serializes no gallery settings and preserves unrelated settings");
-  const sizeBefore=tuning.settings.thumbnailSize,gapBefore=tuning.settings.gap;
+  const radius = folder.controllers.find(c=>c.property==="sphereRadius");
+  check(radius.min===10&&radius.max===20&&radius.step===0.1,"Radius uses the safe reference shell as its minimum");
+  const centerBefore=room.getCenter(),lensBefore=camera.projectionMatrix.clone(),widthBefore=projectedWidth();
+  const physicalSizes=room.monitors.map(m=>({scale:m.scale.clone(),width:m.children.at(-1).scale.x,height:m.children.at(-1).scale.y}));
+  const angularSize=m=>{
+    const screen=m.children.at(-1);
+    return screen.localToWorld(new THREE.Vector3(-.5,-.5,0)).sub(centerBefore)
+      .angleTo(screen.localToWorld(new THREE.Vector3(.5,.5,0)).sub(centerBefore));
+  };
+  const baselineAngles=room.monitors.map(angularSize),radiusMeasurements=[];
+  for(const value of [10,12.3,20,10,15]){
+    radius.setValue(value);assertFrameClearance();
+    const widthRatio=projectedWidth()/widthBefore;
+    check(value===10?Math.abs(widthRatio-1)<1e-9:widthRatio<.99,"Radius visibly changes projected photograph size at fixed lens");
+    check(room.monitors.every((m,i)=>m.scale.equals(physicalSizes[i].scale)
+      &&m.children.at(-1).scale.x===physicalSizes[i].width&&m.children.at(-1).scale.y===physicalSizes[i].height),
+      "Radius leaves all world-space photo and frame dimensions unchanged");
+    check(room.monitors.every((m,i)=>value===10?Math.abs(angularSize(m)-baselineAngles[i])<1e-9:
+      angularSize(m)<baselineAngles[i]*(value===20?.75:1)),"Every photo has measurably smaller angular size at larger radius");
+    radiusMeasurements.push({radius:value,projectedWidthRatio:widthRatio});
+    if(value===20){
+      const sampled=measureActual();
+      check(Math.abs(sampled.gap-tuning.settings.effectiveGap)<.2&&sampled.overlap===0,
+        "Effective Gap matches actual fixed-size photo coverage after radius change");
+    }
+    check(room.monitors.every((m,i)=>Math.abs(m.children.at(-1).getWorldPosition(new THREE.Vector3()).distanceTo(centerBefore)-value)<1e-9
+      &&m.quaternion.equals(before[i].quaternion)&&m.scale.x>0&&m.scale.x===m.scale.y&&m.scale.x===m.scale.z),"Radius sets every photo distance without inversion or orientation changes");
+    check(camera.projectionMatrix.equals(lensBefore)&&camera.position.equals(heldPosition)&&camera.quaternion.equals(heldQuaternion)
+      &&room.getCenter().equals(centerBefore),"Radius leaves camera, lens and gallery center unchanged");
+    gap.setValue(30);gap.setValue(0);
+    check(room.monitors.every(m=>Math.abs(m.children.at(-1).getWorldPosition(new THREE.Vector3()).distanceTo(centerBefore)-value)<1e-9),"Gap updates retain chosen radius");
+    check(loads===20&&room.monitors.every((m,i)=>m.children.at(-1)===before[i].screen&&m.children.at(-1).material===before[i].material
+      &&m.children.at(-1).material.map===before[i].texture&&m.userData.photo===before[i].photo&&m.userData.mosaicCell===before[i].cell),"Radius reuses all meshes, materials, textures, photo assignments and packed cells");
+  }
+  for(const [bad,expected] of [[-1,10],[5,10],[999,20],[NaN,10],[Infinity,10],[null,10]]){
+    radius.setValue(bad);check(tuning.settings.sphereRadius===expected,"Invalid/external radius clamps or falls back safely");
+  }
+  size.setValue(83);gap.setValue(12.3);radius.setValue(16.4);
+  const saved=gui.save(),values=saved.folders["Gallery / Cities"].controllers;
+  check(values["Thumbnail Size (%)"]===83&&values["Gap (%)"]===12.3&&values["Sphere Radius (units)"]===16.4
+    &&!("Effective Gap (%)" in values)&&saved.controllers.Unrelated===17,"Native lil-gui Save stores all tuning values and excludes diagnostics");
+  const appSource=readFileSync("src/core/App.js","utf8");
+  const appMethod=name=>{
+    const signature="  "+name+"() {",start=appSource.indexOf(signature)+signature.length;
+    return new Function(appSource.slice(start,appSource.indexOf("\n  }",start)));
+  };
+  const storage=new Map();
+  globalThis.localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)};
+  const app={gui,themeManager:{activeThemeName:"environment"},showNotification(){}};
+  appMethod("saveGUISettings").call(app);
+  check(storage.has("hero-core-gui-environment"),"Existing Settings Save uses original theme-local storage key");
+  size.setValue(40);gap.setValue(2);radius.setValue(5);
+  app.gui={load:data=>gui.load(data),controllersRecursive:()=>gui.folders.flatMap(f=>f.controllers)};
+  appMethod("loadGUISettings").call(app);
+  check(tuning.settings.thumbnailSize===83&&tuning.settings.gap===12.3&&tuning.settings.sphereRadius===16.4,"Existing Settings Load restores complete combination live");
+  const freshGUI=new Gui(),freshCamera=new THREE.PerspectiveCamera(60,1,.1,100);
+  freshCamera.zoom=1.2;
+  const fresh=new CitiesGalleryControls(freshGUI,freshCamera);
+  check(!("Gap (%)" in freshGUI.save().folders["Gallery / Cities"].controllers),"Pre-entry Save preserves unmeasured default gap");
+  freshGUI.load(JSON.parse(storage.get("hero-core-gui-environment")));
+  check(!fresh.room&&freshCamera.zoom===1.2,"Load before first entry defers meshes and camera work");
+  const freshRoom=new GalleryRoom(new THREE.Group(),{photoLoader:async()=>new THREE.Texture()});
+  fresh.enter(freshRoom);await freshRoom.ready;
+  check(fresh.settings.thumbnailSize===83&&fresh.settings.gap===12.3&&fresh.settings.sphereRadius===16.4
+    &&Math.abs(freshCamera.zoom-camera.zoom)<1e-12&&freshRoom.monitors.every((m,i)=>m.position.distanceTo(room.monitors[i].position)<1e-9
+      &&m.scale.distanceTo(room.monitors[i].scale)<1e-9&&Math.abs(m.userData.panelSize.width-room.monitors[i].userData.panelSize.width)<1e-9),
+    "Fresh controls, room and asynchronous photos reproduce saved transforms and lens");
+  fresh.leave();freshGUI.load({folders:{"Gallery / Cities":{controllers:{"Thumbnail Size (%)":40,"Gap (%)":20}}}});fresh.enter(freshRoom);
+  check(fresh.settings.sphereRadius===10&&fresh.settings.thumbnailSize===40&&fresh.settings.gap===20,"Older settings without Radius safely load with radius 10");
+  fresh.dispose();freshRoom.dispose();
+  const zeroGUI=new Gui(),zero=new CitiesGalleryControls(zeroGUI,new THREE.PerspectiveCamera());
+  zeroGUI.load({folders:{"Gallery / Cities":{controllers:{"Gap (%)":0,"Sphere Radius (units)":5}}}});
+  const zeroRoom=new GalleryRoom(new THREE.Group(),{photoLoader:async()=>new THREE.Texture()});
+  zero.enter(zeroRoom);await zeroRoom.ready;
+  check(zero.settings.gap===0&&zero.settings.sphereRadius===10&&Math.abs(zero.settings.effectiveGap-minimumGap)<1e-9,
+    "Saved Gap zero survives native unchanged-value onChange suppression before first entry");
+  zero.dispose();zeroRoom.dispose();
   gui.load({controllers:{Unrelated:19},folders:{"Gallery / Cities":{controllers:{"Thumbnail Size (%)":40,"Gap (%)":20}}}});
-  check(tuning.settings.thumbnailSize===sizeBefore&&tuning.settings.gap===gapBefore&&unrelated.value===19,
-    "root Load ignores gallery tuning without changing unrelated load behavior");
+  check(tuning.settings.thumbnailSize===40&&tuning.settings.gap===20&&tuning.settings.sphereRadius===10&&unrelated.value===19,"Root Load restores legacy gallery values and unrelated values");
+  radius.setValue(20);
   reset.object[reset.property]();
-  check(tuning.settings.thumbnailSize===100&&camera.zoom===1.2&&Math.abs(tuning.settings.gap-baselineGap)<1e-10,
+  check(tuning.settings.sphereRadius===10&&tuning.settings.thumbnailSize===100&&camera.zoom===1.2&&Math.abs(tuning.settings.gap-baselineGap)<1e-10,
     "Reset restores initial slider and lens values immediately");
   check(room.monitors.every((m,i)=>Math.abs(m.userData.panelSize.width-before[i].width)<1e-8
     &&Math.abs(m.userData.panelSize.height-before[i].height)<1e-8),"Reset restores every original tile dimension");
-  for (const magnification of [25,150]) {
-    size.setValue(magnification); gap.setValue(5);
+  for (const [magnification,shellRadius] of [[25,10],[150,20]]) {
+    radius.setValue(shellRadius);size.setValue(magnification); gap.setValue(5);
     camera.updateWorldMatrix(true,false);room.group.updateWorldMatrix(true,true);
     // At high magnification a photo may fill the viewport while its center is
     // offscreen. Select an actual visible pixel rather than a panel center.
@@ -264,20 +337,20 @@ try {
     check(folder.hidden&&camera.zoom===1.2&&director.mode==="explore","leaving Cities hides controls and restores Earth lens");
     controller.open();director.update(1/60);controller.update();
     check(tuning.folder===folder&&gui.folders.length===folderCount&&Math.abs(camera.zoom-1.8)<1e-12
-      &&Math.abs(tuning.settings.effectiveGap-5)<1e-8,"reentry reuses the room/folder and unsaved session values without lens drift");
+      &&Math.abs(tuning.settings.effectiveGap-measureMosaic(room.monitors).photoFreeFraction*100)<1e-8&&tuning.settings.sphereRadius===20,"reentry reuses the room/folder and unsaved session values without lens drift");
   }
   check(loads===20,"reentering tuned gallery does not reload any photo");
   const pendingRoom=new GalleryRoom(new THREE.Group(),{photoLoader:async()=>new THREE.Texture()});
-  setMosaicGap(pendingRoom.monitors,15); await pendingRoom.ready;
+  setMosaicRadius(pendingRoom.monitors,20);setMosaicGap(pendingRoom.monitors,15); await pendingRoom.ready;
   check(pendingRoom.monitors.every(m=>m.children.at(-1).scale.x===m.userData.panelSize.width
-    &&m.children.at(-1).scale.y===m.userData.panelSize.height)
-    &&Math.abs(measureMosaic(pendingRoom.monitors).photoFreeFraction*100-15)<1e-8,
+    &&m.children.at(-1).scale.y===m.userData.panelSize.height&&m.userData.mosaicRadius===20)
+    &&measureMosaic(pendingRoom.monitors).photoFreeFraction*100>15,
     "images completing after a live gap change use the latest dimensions without reloading");
   pendingRoom.dispose();
   theme.destroy();controller.dispose();
   check(folder.destroyed&&camera.zoom===1.2&&window.listeners.length===baseListeners&&document.body.children.length===0
     &&container.children.length===0,"theme exit restores lens and removes folder, gallery UI, resources and listeners");
-  output.log(JSON.stringify({result:"PASS",checks,minimumSafeGapPercent:minimumGap,sliderSizeRange:[25,150],sliderGapRange:[0,30],
+  output.log(JSON.stringify({result:"PASS",checks,minimumSafeGapPercent:minimumGap,sliderSizeRange:[25,150],sliderGapRange:[0,30],sliderRadiusRange:[10,20],radiusMeasurements,
     textureLoads:loads,scope:"real CameraDirector, actual photo planes and projection; DOM/GUI doubles; no browser visual claim"}));
 } finally {
   THREE.TextureLoader.prototype.load=textureLoad;Object.assign(console,output);

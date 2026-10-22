@@ -1,6 +1,12 @@
 import * as THREE from "three";
 
-const RADIUS = 10;
+export const DEFAULT_GALLERY_RADIUS = 10;
+// The near-complete mosaic at radius 10 is the safe minimum for fixed-size
+// frames. Moving inward would overlap neighbouring panels, especially at Gap 0.
+export const MIN_GALLERY_RADIUS = DEFAULT_GALLERY_RADIUS;
+export const MAX_GALLERY_RADIUS = DEFAULT_GALLERY_RADIUS * 2;
+const safeRadius = value => Number.isFinite(value)
+  ? THREE.MathUtils.clamp(value, MIN_GALLERY_RADIUS, MAX_GALLERY_RADIUS) : DEFAULT_GALLERY_RADIUS;
 const SEAM = 0.01;
 const MIN_SAFE_SEAM = 0.003;
 // Thin physical depth prevents a tilted frame's side walls from intruding
@@ -127,13 +133,15 @@ function applyCell(monitor, cell, inset, basis = sectorBasis(cell.face)) {
   const { x0, x1, y0, y1 } = cell;
   const x = (x0 + x1) / 2, y = (y0 + y1) / 2;
   const center = outward.clone().addScaledVector(right, x).addScaledVector(up, y);
-  const radialScale = RADIUS / center.length();
-  const scale = radialScale * LOCAL_SCALE;
+  const radius = safeRadius(monitor.userData.mosaicRadius);
+  const radialScale = radius / center.length();
+  const scale = DEFAULT_GALLERY_RADIUS / center.length() * LOCAL_SCALE;
   const width = (x1 - x0) * (1 - inset) / LOCAL_SCALE;
   const height = (y1 - y0) * (1 - inset) / LOCAL_SCALE;
   monitor.position.copy(center).multiplyScalar(radialScale).addScaledVector(inward, -0.09 * scale);
   monitor.quaternion.copy(quaternion);
   monitor.scale.setScalar(scale);
+  monitor.userData.mosaicRadius = radius;
   monitor.userData.panelSize = { width, height };
   monitor.userData.mosaicCell = cell;
   monitor.userData.mosaicInset = inset;
@@ -181,7 +189,8 @@ export function measureMosaic(monitors) {
     const { x0, x1, y0, y1 } = monitor.userData.mosaicCell;
     cells += rectangleAngle(x0, x1, y0, y1);
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-    const inset = monitor.userData.mosaicInset ?? SEAM;
+    const inset = 1 - (1 - (monitor.userData.mosaicInset ?? SEAM))
+      * DEFAULT_GALLERY_RADIUS / safeRadius(monitor.userData.mosaicRadius);
     const hw = (x1 - x0) * (1 - inset) / 2, hh = (y1 - y0) * (1 - inset) / 2;
     photos += rectangleAngle(cx - hw, cx + hw, cy - hh, cy + hh);
   }
@@ -196,7 +205,9 @@ export function measureMosaic(monitors) {
     // on distance from ANY viewing ray to some photograph, including poles.
     const inset = Math.max(...monitors.filter(m => m.userData.mosaicCell.face === face).map(m => {
       const t = m.userData.mosaicCell;
-      return (m.userData.mosaicInset ?? SEAM) / 2 * Math.hypot(t.x1 - t.x0, t.y1 - t.y0);
+      const inset = 1 - (1 - (m.userData.mosaicInset ?? SEAM))
+        * DEFAULT_GALLERY_RADIUS / safeRadius(m.userData.mosaicRadius);
+      return inset / 2 * Math.hypot(t.x1 - t.x0, t.y1 - t.y0);
     }));
     maxGapRadius = Math.max(maxGapRadius, Math.hypot(padX, padY) + inset);
   }
@@ -214,8 +225,9 @@ function coverageAtInset(monitors, inset) {
   }, 0) / (4 * Math.PI);
 }
 
-/** Update existing meshes only. Gap is whole-sphere photo-free angular area,
- * not a second size multiplier. Zero retains clearance for the thin frames. */
+/** Update existing meshes only. Gap targets photo-free angular area at the
+ * reference radius 10; moving fixed-size panels outward increases actual gaps.
+ * Zero retains clearance for the thin frames at the minimum radius. */
 export function setMosaicGap(monitors, gapPercent) {
   const requested = Number.isFinite(gapPercent) ? THREE.MathUtils.clamp(gapPercent, 0, 30) : 0;
   const target = Math.min(1 - requested / 100, coverageAtInset(monitors, MIN_SAFE_SEAM));
@@ -228,4 +240,22 @@ export function setMosaicGap(monitors, gapPercent) {
   const bases = DIRECTIONS.map((_, face) => sectorBasis(face));
   for (const monitor of monitors) applyCell(monitor, monitor.userData.mosaicCell, inset, bases[monitor.userData.mosaicCell.face]);
   return measureMosaic(monitors);
+}
+
+/** Move photo centers along their original rays without changing any scale.
+ * Fixed world dimensions intentionally shrink in perspective as radius grows.
+ * The reference radius is the safe minimum for the dense mosaic's frames. */
+export function setMosaicRadius(monitors, radius) {
+  const value = safeRadius(radius);
+  for (const monitor of monitors) {
+    const cell = monitor.userData.mosaicCell;
+    const { outward, right, up, inward } = sectorBasis(cell.face);
+    const center = outward.clone().addScaledVector(right, (cell.x0 + cell.x1) / 2)
+      .addScaledVector(up, (cell.y0 + cell.y1) / 2);
+    // Correct for the photo plane's local z offset without scaling its frame.
+    monitor.position.copy(center).multiplyScalar(value / center.length())
+      .addScaledVector(inward, -0.09 * monitor.scale.z);
+    monitor.userData.mosaicRadius = value;
+  }
+  return value;
 }
