@@ -159,8 +159,7 @@ try {
       check(room.content==="placeholders"&&room.photoMaterials.size===0&&!room.photoGeometry&&room.monitors.every(m=>m.userData.photoStatus==="placeholder"
         &&m.userData.photo.path.startsWith(g.config.id+"/placeholder-")&&m.children.every(c=>!c.material.map)),"placeholder destinations contain no Cities photographs or textures");
       check(requests.length===0&&bitmaps.length===0,"placeholder destinations launch zero media requests/decodes");
-      check(!g.controls.radiusControl&&!("sphereRadius" in g.controls.settings)&&!g.controls.folder.controllers.some(c=>c.property==="sphereRadius"),
-        "Cities Radius experiment is absent from other destination settings and controls");
+
       check(!interaction.openLightbox(room.monitors[0])&&!interaction.hitPhoto(events()),"placeholders cannot open an empty lightbox");
     }else{
       check(requests.length===20&&room.photoMaterials.size===20,"Cities retains its original twenty shared photo textures");
@@ -173,6 +172,30 @@ try {
       check(!!interaction.lightbox&&g.controls.folder.hidden,"shared short-click path opens Cities lightbox and hides its GUI");
       escape();interaction.update();check(!interaction.lightbox&&interaction.opened&&!g.controls.folder.hidden,"first ESC returns from lightbox to Cities");
     }
+    const radius=g.controls.folder.controllers.find(c=>c.property==="sphereRadius");
+    check(g.controls.radiusControl&&radius&&radius.min===10&&radius.max===20&&g.controls.settings.sphereRadius===10,
+      "all destinations expose the shared Sphere Radius at the unchanged safe default");
+    room.group.updateWorldMatrix(true,true);
+    const panelSurface=m=>m.userData.photoStatus==="ready"?m.children.at(-1):m.children[1];
+    const angle=m=>{
+      const surface=panelSurface(m),center=room.getCenter();
+      return surface.localToWorld(new THREE.Vector3(-.5,-.5,0)).sub(center)
+        .angleTo(surface.localToWorld(new THREE.Vector3(.5,.5,0)).sub(center));
+    };
+    const geometryBefore=room.monitors.map(m=>({scale:m.scale.clone(),surfaceScale:panelSurface(m).scale.clone(),
+      angle:angle(m),quaternion:m.quaternion.clone(),geometry:panelSurface(m).geometry,material:panelSurface(m).material}));
+    const radiusPose=camera.position.clone(),radiusHeading=camera.quaternion.clone(),radiusLens=camera.projectionMatrix.clone(),
+      gapBefore=g.controls.settings.gap,sizeBefore=g.controls.settings.thumbnailSize;
+    radius.setValue(20);
+    check(room.monitors.every((m,i)=>m.scale.equals(geometryBefore[i].scale)&&panelSurface(m).scale.equals(geometryBefore[i].surfaceScale)
+      &&m.quaternion.equals(geometryBefore[i].quaternion)&&panelSurface(m).geometry===geometryBefore[i].geometry
+      &&panelSurface(m).material===geometryBefore[i].material&&angle(m)<geometryBefore[i].angle*.75),
+      "every destination visibly reduces panel angular size at Radius 20 without scaling meshes or replacing resources");
+    check(camera.position.equals(radiusPose)&&camera.quaternion.equals(radiusHeading)&&camera.projectionMatrix.equals(radiusLens)
+      &&g.controls.settings.gap===gapBefore&&g.controls.settings.thumbnailSize===sizeBefore,
+      "Radius leaves camera, Size and Gap settings unchanged for every destination");
+    radius.setValue(10);
+    check(room.monitors.every((m,i)=>Math.abs(angle(m)-geometryBefore[i].angle)<1e-9),"returning Radius to 10 restores original angular panel sizes");
     const before=camera.quaternion.clone(),drag=events();
     interaction.down(drag);interaction.move({...drag,clientX:550});interaction.up({...drag,clientX:550,buttons:0,timeStamp:100});
     director.update(1/60);
@@ -180,7 +203,18 @@ try {
       "shared LMB drag looks around without moving the center or opening a lightbox");
     const size=g.controls.folder.controllers.find(c=>c.property==="thumbnailSize"),gap=g.controls.folder.controllers.find(c=>c.property==="gap");
     size.setValue(90+number*5);gap.setValue(number*2);
-    if(number===1)g.controls.folder.controllers.find(c=>c.property==="sphereRadius").setValue(16.4);
+    radius.setValue(10+number);
+    gap.setValue(0);gap.setValue(number*2);
+    check(g.controls.settings.sphereRadius===10+number&&room.monitors.every(m=>m.userData.mosaicRadius===10+number),
+      "Gap changes retain each destination's independent Radius");
+    const otherSettings=JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings));
+    g.controls.settings.reset();
+    check(g.controls.settings.thumbnailSize===100&&g.controls.settings.sphereRadius===10
+      &&Math.abs(g.controls.settings.gap-g.controls.defaultGap)<1e-9&&camera.zoom===1
+      &&room.monitors.every(m=>m.userData.mosaicRadius===10),"Reset restores Size, Gap and Radius for the active gallery");
+    check(JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings))===otherSettings,
+      "Reset leaves all other destination settings unchanged");
+    size.setValue(90+number*5);gap.setValue(number*2);radius.setValue(10+number);
     if(number%2)escape();else interaction.back.emit("click",{});
     check(!interaction.opened&&theme.earth.group.visible&&theme.satellites.group.visible&&!room.group.visible
       &&camera.position.distanceTo(home)<1e-9&&camera.getWorldDirection(new THREE.Vector3()).dot(heading)>.999999&&camera.zoom===1,
@@ -191,7 +225,7 @@ try {
   for(const config of EARTH_GALLERIES){
     const values=saved.folders["Gallery / "+config.name].controllers;
     check(values["Thumbnail Size (%)"]===90+config.number*5&&values["Gap (%)"]===config.number*2
-      &&(config.number===1?values["Sphere Radius (units)"]===16.4:!("Sphere Radius (units)" in values)),"native root Save isolates every destination's settings");
+      &&values["Sphere Radius (units)"]===10+config.number,"native root Save isolates every destination's settings");
   }
   const requestCount=requests.length;
   for(let cycle=0;cycle<3;cycle++)for(const config of EARTH_GALLERIES){
@@ -200,7 +234,7 @@ try {
       "switching reuses bounded rooms and existing GUI folders with one overlay");
     check([...rooms.values()].filter(r=>r.group.visible).length===1&&window.listeners.length===baseListeners+6,
       "only selected room is visible; listener count stays fixed");
-    check(interaction.layoutControls.settings.thumbnailSize===90+config.number*5&&interaction.layoutControls.settings.gap===config.number*2,
+    check(interaction.layoutControls.settings.thumbnailSize===90+config.number*5&&interaction.layoutControls.settings.gap===config.number*2&&interaction.layoutControls.settings.sphereRadius===10+config.number,
       "switching preserves separate tuning values without lens drift");
     interaction.close();
   }
@@ -218,15 +252,33 @@ try {
   check(gui.folders.length===7&&window.listeners.length===baseListeners+6,"reinitialization replaces all six folders and observers without duplication");
   gui.load(saved);
   check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.settings.thumbnailSize===90+g.config.number*5
-    &&g.controls.settings.gap===g.config.number*2),"root Load restores every destination before its room exists");
-  for(const number of [6,2,1]){
+    &&g.controls.settings.gap===g.config.number*2&&g.controls.settings.sphereRadius===10+g.config.number),"root Load restores every destination before its room exists");
+  for(const number of [6,5,4,3,2,1]){
     clickSatellite(number);await interaction.room.ready;
-    check(Math.abs(camera.zoom-(90+number*5)/100)<1e-12&&interaction.layoutControls.settings.gap===number*2,
+    check(Math.abs(camera.zoom-(90+number*5)/100)<1e-12&&interaction.layoutControls.settings.gap===number*2&&interaction.layoutControls.settings.sphereRadius===10+number
+      &&interaction.room.monitors.every(m=>m.userData.mosaicRadius===10+number),
       "restored settings apply only when the corresponding destination enters");
     interaction.close();
   }
-  check(interaction.galleries.get(1).controls.settings.sphereRadius===16.4&&interaction.galleries.get(2).room.monitors.every(m=>m.userData.mosaicRadius===10),
-    "saved Cities radius is restored without propagating to Countries");
+  const legacy=JSON.parse(JSON.stringify(saved));
+  for(const config of EARTH_GALLERIES)delete legacy.folders["Gallery / "+config.name].controllers["Sphere Radius (units)"];
+  gui.load(legacy);
+  check([...interaction.galleries.values()].every(g=>g.controls.settings.sphereRadius===10
+    &&g.controls.settings.thumbnailSize===90+g.config.number*5&&g.controls.settings.gap===g.config.number*2),
+    "older presets without Radius restore safe defaults for all six while retaining independent Size and Gap");
+  for(const config of EARTH_GALLERIES){
+    clickSatellite(config.number);
+    check(interaction.room.monitors.every(m=>m.userData.mosaicRadius===10),"legacy default radius applies on entry for every destination");
+    interaction.close();
+  }
+  clickSatellite(3);
+  gui.load(saved);
+  check(interaction.layoutControls.settings.sphereRadius===13&&interaction.room.monitors.every(m=>m.userData.mosaicRadius===13)
+    &&Math.abs(camera.zoom-1.05)<1e-12,"existing root Load restores active Water controls and meshes live");
+  gui.load(legacy);
+  check(interaction.layoutControls.settings.sphereRadius===10&&interaction.room.monitors.every(m=>m.userData.mosaicRadius===10),
+    "older preset without Radius safely restores the active gallery live");
+  interaction.close();
   clickSatellite(4);
   theme.destroy();interaction.dispose();
   check(window.listeners.length===baseListeners&&document.body.children.length===0&&container.children.length===0&&gui.folders.length===0
