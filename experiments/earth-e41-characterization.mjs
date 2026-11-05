@@ -116,15 +116,15 @@ try {
       if(interaction.hitPhoto(event))return event;
     }
   };
-  check(EARTH_GALLERIES.length===6&&interaction.galleries.size===6,"six configuration records share one interaction owner");
+  check(EARTH_GALLERIES.length===7&&interaction.galleries.size===7,"seven configuration records share one interaction owner");
   check(EARTH_GALLERIES.every((c,i)=>c.number===EARTH_SATELLITES[i].number&&c.name.toUpperCase()===EARTH_SATELLITES[i].title
     &&c.layout==="SPHERICAL"),"configuration matches all satellite identities with current sphere layouts");
-  check(EARTH_GALLERIES.map(c=>c.plannedLayout).join(",")==="SPHERICAL,CUBE,IMMERSIVE_SPHERE,SPIRAL,TIMELINE_TUNNEL,CONSTELLATION",
+  check(EARTH_GALLERIES.map(c=>c.plannedLayout).join(",")==="SPHERICAL,CUBE,IMMERSIVE_SPHERE,SPIRAL,TIMELINE_TUNNEL,CONSTELLATION,SPHERICAL",
     "future independent personalities are recorded without enabling new layouts");
-  check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.folder.hidden)&&gui.folders.length===7,
-    "rooms are lazy; six distinct settings folders register once before root Settings Load");
+  check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.folder.hidden)&&gui.folders.length===8,
+    "rooms are lazy; seven distinct settings folders register once before root Settings Load");
   check(window.listeners.length===baseListeners+6,"one set of six interaction listeners serves all destinations");
-  check(!interaction.open(0)&&!interaction.open(7)&&!interaction.opened,"unknown destinations cannot open");
+  check(!interaction.open(0)&&!interaction.open(8)&&!interaction.opened,"unknown destinations cannot open");
   for(const sphere of theme.satellites.satellites){
     check(interaction.hit(at(sphere.children[0]))===sphere.userData.number,"number badge targets its own satellite, ahead of neighbouring halos");
   }
@@ -143,7 +143,7 @@ try {
     width:m.userData.panelSize.width,height:m.userData.panelSize.height,photo:m.userData.photo}));baseline.dispose();
   const rooms=new Map();
   // Visit placeholders before Cities to prove they start no city media workers.
-  for(const number of [2,3,4,5,6,1]){
+  for(const number of [2,3,4,5,6,7,1]){
     clickSatellite(number);
     const g=interaction.activeGallery,room=interaction.room;await room.ready;
     rooms.set(number,room);
@@ -230,7 +230,7 @@ try {
   const requestCount=requests.length;
   for(let cycle=0;cycle<3;cycle++)for(const config of EARTH_GALLERIES){
     clickSatellite(config.number);
-    check(interaction.room===rooms.get(config.number)&&gui.folders.length===7&&document.body.children.length===1,
+    check(interaction.room===rooms.get(config.number)&&gui.folders.length===8&&document.body.children.length===1,
       "switching reuses bounded rooms and existing GUI folders with one overlay");
     check([...rooms.values()].filter(r=>r.group.visible).length===1&&window.listeners.length===baseListeners+6,
       "only selected room is visible; listener count stays fixed");
@@ -249,11 +249,11 @@ try {
   check([...rooms.values()].every(r=>r.disposed&&r.abortController.signal.aborted&&!r.group.parent)&&[...watched.values()].every(n=>n===1)
     &&bitmaps.every(b=>b.closes===1),"reinitialization disposes every cached room, texture/bitmap, geometry and material exactly once");
   interaction=theme.galleryInteraction;
-  check(gui.folders.length===7&&window.listeners.length===baseListeners+6,"reinitialization replaces all six folders and observers without duplication");
+  check(gui.folders.length===8&&window.listeners.length===baseListeners+6,"reinitialization replaces all seven folders and observers without duplication");
   gui.load(saved);
   check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.settings.thumbnailSize===90+g.config.number*5
     &&g.controls.settings.gap===g.config.number*2&&g.controls.settings.sphereRadius===10+g.config.number),"root Load restores every destination before its room exists");
-  for(const number of [6,5,4,3,2,1]){
+  for(const number of [7,6,5,4,3,2,1]){
     clickSatellite(number);await interaction.room.ready;
     check(Math.abs(camera.zoom-(90+number*5)/100)<1e-12&&interaction.layoutControls.settings.gap===number*2&&interaction.layoutControls.settings.sphereRadius===10+number
       &&interaction.room.monitors.every(m=>m.userData.mosaicRadius===10+number),
@@ -265,7 +265,7 @@ try {
   gui.load(legacy);
   check([...interaction.galleries.values()].every(g=>g.controls.settings.sphereRadius===10
     &&g.controls.settings.thumbnailSize===90+g.config.number*5&&g.controls.settings.gap===g.config.number*2),
-    "older presets without Radius restore safe defaults for all six while retaining independent Size and Gap");
+    "older presets without Radius restore safe defaults for all seven while retaining independent Size and Gap");
   for(const config of EARTH_GALLERIES){
     clickSatellite(config.number);
     check(interaction.room.monitors.every(m=>m.userData.mosaicRadius===10),"legacy default radius applies on entry for every destination");
@@ -283,8 +283,8 @@ try {
   theme.destroy();interaction.dispose();
   check(window.listeners.length===baseListeners&&document.body.children.length===0&&container.children.length===0&&gui.folders.length===0
     &&bitmaps.every(b=>b.closes===1),"theme exit while a placeholder gallery is open cleans all rooms, controls, listeners and media exactly once");
-  output.log(JSON.stringify({result:"PASS",checks,destinations:6,placeholderDestinations:5,panelsPerDestination:75,
-    repeatedSwitches:18,initialCityRequests:requestCount,scope:"real geometry, CameraDirector, raycasting and native GUI serialization; DOM/HTTP doubles; no browser visual claim"}));
+  output.log(JSON.stringify({result:"PASS",checks,destinations:7,placeholderDestinations:6,panelsPerDestination:75,
+    repeatedSwitches:21,initialCityRequests:requestCount,scope:"real geometry, CameraDirector, raycasting and native GUI serialization; DOM/HTTP doubles; no browser visual claim"}));
 }finally{
   THREE.TextureLoader.prototype.load=textureLoad;Object.assign(console,output);
   globalThis.fetch=originalFetch;

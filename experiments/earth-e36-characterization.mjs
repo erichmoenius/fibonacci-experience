@@ -93,7 +93,7 @@ try {
   theme.initializeFlightControls({ cameraDirector: director });
   const controller = theme.galleryInteraction;
   const tuning = controller.layoutControls;
-  check(gui.folders.length === 7 && tuning.folder.hidden, "gallery folder registers before first entry for Settings Load, initially hidden");
+  check(gui.folders.length === 8 && tuning.folder.hidden, "gallery folder registers before first entry for Settings Load, initially hidden");
   let loads = 0;
   const room = new GalleryRoom(container, { photoLoader: async () => { loads++; return new THREE.Texture({close() {}}); } });
   await room.ready;

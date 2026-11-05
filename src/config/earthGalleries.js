@@ -7,4 +7,5 @@ export const EARTH_GALLERIES = Object.freeze([
   { number: 4, id: "animals", name: "Animals", content: "placeholders", plannedLayout: "SPIRAL" },
   { number: 5, id: "events", name: "Events", content: "placeholders", plannedLayout: "TIMELINE_TUNNEL" },
   { number: 6, id: "ethnicity", name: "Ethnicity", content: "placeholders", plannedLayout: "CONSTELLATION" },
+  { number: 7, id: "plants", name: "Plants", content: "placeholders", plannedLayout: "SPHERICAL" },
 ].map(config => Object.freeze({ layout: "SPHERICAL", radiusControl: true, ...config })));

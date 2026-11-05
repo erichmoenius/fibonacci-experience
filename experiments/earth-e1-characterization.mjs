@@ -22,8 +22,8 @@ try {
   check(theme.earth.group.visible && theme.earth.getWorldCenter(new THREE.Vector3()).length() === 0, "central Earth ready");
   check(theme.getGateways().length === 0, "no transporters");
   const spheres = theme.satellites.satellites;
-  check(spheres.length === 6, "exactly six satellites");
-  check(new Set(spheres.map(s => s.material.color.getHex())).size === 6, "six different colors");
+  check(spheres.length === 7, "exactly seven satellites");
+  check(new Set(spheres.map(s => s.material.color.getHex())).size === 7, "seven different colors");
   check(spheres.every((s, i) => s.userData.number === i + 1 && s.userData.title === EARTH_SATELLITES[i].title), "number/category mapping");
   check(spheres.every(s => s.children.length === 1 && s.children[0].isSprite && s.children[0].material.map.image.data.some(v => v === 255)), "visible raster number badges");
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
@@ -55,7 +55,7 @@ try {
       }
     }
   }
-  check(minEarthGap > 1.8 && minPairGap > 3.6, "positive surface clearances throughout three orbits");
+  check(minEarthGap > 1.8 && minPairGap > 3, "positive surface clearances throughout three orbits");
   const before = spheres.map(s => s.position.clone());
   for (const delta of [-1, NaN, Infinity]) theme.satellites.update(delta);
   check(spheres.every((s, i) => s.position.equals(before[i])), "invalid/backward time stable");
@@ -69,10 +69,10 @@ try {
   theme.destroy();
   theme.satellites.dispose();
   check(manager.container.children.length === 0, "theme cleanup removes Earth and satellites");
-  check(geometryDisposals === 1 && textureDisposals === 6 && materialDisposals === 12, "shared geometry and all badge resources disposed once");
+  check(geometryDisposals === 1 && textureDisposals === 7 && materialDisposals === 14, "shared geometry and all badge resources disposed once");
   manager.activate("environment");
   await manager.activeTheme.earth.ready;
-  check(manager.activeTheme.satellites.satellites.length === 6, "independent reentry recreates exactly six");
+  check(manager.activeTheme.satellites.satellites.length === 7, "independent reentry recreates exactly seven");
   manager.activeTheme.destroy();
   console.log(JSON.stringify({ result: "PASS", checks, minEarthGap, minPairGap, aspects: ["landscape", "square", "portrait"], scope: "CPU scene/frustum/lifecycle checks; no browser visual claim" }));
 } finally {

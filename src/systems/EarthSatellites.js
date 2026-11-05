@@ -8,6 +8,7 @@ export const EARTH_SATELLITES = Object.freeze([
   { number: 4, title: "ANIMALS", color: 0x46d46b },
   { number: 5, title: "EVENTS", color: 0xff6038 },
   { number: 6, title: "ETHNICITY", color: 0xb367ed },
+  { number: 7, title: "PLANTS", color: 0xb5dc36 },
 ].map(Object.freeze));
 export const SATELLITE_RADIUS = 0.28;
 export const ORBIT_RADIUS = 4.2;
@@ -21,6 +22,7 @@ const DIGITS = [
   ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
   ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
   ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+  ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
 ];
 
 // Tiny built-in raster badges: no font downloads, canvas, or extra renderer.
