@@ -118,7 +118,7 @@ try {
   };
   check(EARTH_GALLERIES.length===7&&interaction.galleries.size===7,"seven configuration records share one interaction owner");
   check(EARTH_GALLERIES.every((c,i)=>c.number===EARTH_SATELLITES[i].number&&c.name.toUpperCase()===EARTH_SATELLITES[i].title
-    &&c.layout==="SPHERICAL"),"configuration matches all satellite identities with current sphere layouts");
+    &&c.layout===(c.number===2?"CUBE":"SPHERICAL")),"configuration matches all satellite identities with Countries cube and unchanged spherical layouts");
   check(EARTH_GALLERIES.map(c=>c.plannedLayout).join(",")==="SPHERICAL,CUBE,IMMERSIVE_SPHERE,SPIRAL,TIMELINE_TUNNEL,CONSTELLATION,SPHERICAL",
     "future independent personalities are recorded without enabling new layouts");
   check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.folder.hidden)&&gui.folders.length===8,
@@ -142,12 +142,35 @@ try {
   const baselineTiles=baseline.monitors.map(m=>({position:m.position.clone(),scale:m.scale.clone(),quaternion:m.quaternion.clone(),
     width:m.userData.panelSize.width,height:m.userData.panelSize.height,photo:m.userData.photo}));baseline.dispose();
   const rooms=new Map();
+  // Countries preserves stationary-click discrimination and arbitrary entry poses.
+  const countriesPress=at(second);
+  interaction.down(countriesPress);
+  interaction.move({...countriesPress,clientX:countriesPress.clientX+12});
+  interaction.up({...countriesPress,clientX:countriesPress.clientX+12,buttons:0,timeStamp:100});
+  check(!interaction.opened,"dragging over Countries cannot enter its cube");
+  interaction.down(countriesPress);
+  interaction.up({...countriesPress,buttons:0,timeStamp:500});
+  check(!interaction.opened,"holding Countries longer than the acceptance threshold cannot enter");
+  const customPose={position:new THREE.Vector3(1.5,-0.8,14),lookTarget:new THREE.Vector3(-2,1,-3)};
+  director.returnHome(customPose,true);
+  const customHeading=camera.getWorldDirection(new THREE.Vector3());
+  check(interaction.open(2),"Countries can enter from an arbitrary exploration pose");
+  director.update(1/60);
+  check(camera.position.distanceTo(customPose.position)<1e-9,"cube inspection holds the actual entry position");
+  const cubeLook=events();
+  interaction.down(cubeLook);interaction.move({...cubeLook,clientX:580,clientY:540});
+  interaction.up({...cubeLook,clientX:580,clientY:540,buttons:0,timeStamp:100});
+  director.update(1/60);interaction.close();
+  check(camera.position.distanceTo(customPose.position)<1e-9
+    &&camera.getWorldDirection(new THREE.Vector3()).dot(customHeading)>.999999
+    &&director.mode==="explore"&&director.freeFlight.active,"cube exit restores arbitrary entry position, heading and flight ownership");
+  director.returnHome(theme.getHomePose(),true);
   // Visit placeholders before Cities to prove they start no city media workers.
   for(const number of [2,3,4,5,6,7,1]){
     clickSatellite(number);
     const g=interaction.activeGallery,room=interaction.room;await room.ready;
     rooms.set(number,room);
-    check(room instanceof GalleryRoom&&room.layout==="SPHERICAL"&&room.monitors.length===75,"shared room builds 75 sphere panels for "+g.config.name);
+    check(room instanceof GalleryRoom&&room.layout===g.config.layout&&room.monitors.length===75,"shared room builds 75 panels in the selected layout for "+g.config.name);
     check(new Set(room.monitors.map(m=>m.userData.number)).size===75&&room.monitors.every(m=>number===1
       ? m.children.slice(2,-1).every(c=>!c.visible)&&m.children.at(-1).visible : m.children.slice(2).some(c=>c.visible)),
       number===1?"Cities retains its hidden loading glyphs":"placeholder panels have distinct visible mesh numbers");
@@ -173,29 +196,32 @@ try {
       escape();interaction.update();check(!interaction.lightbox&&interaction.opened&&!g.controls.folder.hidden,"first ESC returns from lightbox to Cities");
     }
     const radius=g.controls.folder.controllers.find(c=>c.property==="sphereRadius");
-    check(g.controls.radiusControl&&radius&&radius.min===10&&radius.max===20&&g.controls.settings.sphereRadius===10,
-      "all destinations expose the shared Sphere Radius at the unchanged safe default");
-    room.group.updateWorldMatrix(true,true);
-    const panelSurface=m=>m.userData.photoStatus==="ready"?m.children.at(-1):m.children[1];
-    const angle=m=>{
-      const surface=panelSurface(m),center=room.getCenter();
-      return surface.localToWorld(new THREE.Vector3(-.5,-.5,0)).sub(center)
-        .angleTo(surface.localToWorld(new THREE.Vector3(.5,.5,0)).sub(center));
-    };
-    const geometryBefore=room.monitors.map(m=>({scale:m.scale.clone(),surfaceScale:panelSurface(m).scale.clone(),
-      angle:angle(m),quaternion:m.quaternion.clone(),geometry:panelSurface(m).geometry,material:panelSurface(m).material}));
-    const radiusPose=camera.position.clone(),radiusHeading=camera.quaternion.clone(),radiusLens=camera.projectionMatrix.clone(),
-      gapBefore=g.controls.settings.gap,sizeBefore=g.controls.settings.thumbnailSize;
-    radius.setValue(20);
-    check(room.monitors.every((m,i)=>m.scale.equals(geometryBefore[i].scale)&&panelSurface(m).scale.equals(geometryBefore[i].surfaceScale)
-      &&m.quaternion.equals(geometryBefore[i].quaternion)&&panelSurface(m).geometry===geometryBefore[i].geometry
-      &&panelSurface(m).material===geometryBefore[i].material&&angle(m)<geometryBefore[i].angle*.75),
-      "every destination visibly reduces panel angular size at Radius 20 without scaling meshes or replacing resources");
-    check(camera.position.equals(radiusPose)&&camera.quaternion.equals(radiusHeading)&&camera.projectionMatrix.equals(radiusLens)
-      &&g.controls.settings.gap===gapBefore&&g.controls.settings.thumbnailSize===sizeBefore,
-      "Radius leaves camera, Size and Gap settings unchanged for every destination");
-    radius.setValue(10);
-    check(room.monitors.every((m,i)=>Math.abs(angle(m)-geometryBefore[i].angle)<1e-9),"returning Radius to 10 restores original angular panel sizes");
+    check(number===2 ? !g.controls.radiusControl&&!radius&&g.controls.settings.sphereRadius===undefined
+      : g.controls.radiusControl&&radius&&radius.min===10&&radius.max===20&&g.controls.settings.sphereRadius===10,
+      "Countries omits Sphere Radius; all spherical destinations retain the safe shared control");
+    if(radius){
+      room.group.updateWorldMatrix(true,true);
+      const panelSurface=m=>m.userData.photoStatus==="ready"?m.children.at(-1):m.children[1];
+      const angle=m=>{
+        const surface=panelSurface(m),center=room.getCenter();
+        return surface.localToWorld(new THREE.Vector3(-.5,-.5,0)).sub(center)
+          .angleTo(surface.localToWorld(new THREE.Vector3(.5,.5,0)).sub(center));
+      };
+      const geometryBefore=room.monitors.map(m=>({scale:m.scale.clone(),surfaceScale:panelSurface(m).scale.clone(),
+        angle:angle(m),quaternion:m.quaternion.clone(),geometry:panelSurface(m).geometry,material:panelSurface(m).material}));
+      const radiusPose=camera.position.clone(),radiusHeading=camera.quaternion.clone(),radiusLens=camera.projectionMatrix.clone(),
+        gapBefore=g.controls.settings.gap,sizeBefore=g.controls.settings.thumbnailSize;
+      radius?.setValue(20);
+      check(room.monitors.every((m,i)=>m.scale.equals(geometryBefore[i].scale)&&panelSurface(m).scale.equals(geometryBefore[i].surfaceScale)
+        &&m.quaternion.equals(geometryBefore[i].quaternion)&&panelSurface(m).geometry===geometryBefore[i].geometry
+        &&panelSurface(m).material===geometryBefore[i].material&&angle(m)<geometryBefore[i].angle*.75),
+        "every destination visibly reduces panel angular size at Radius 20 without scaling meshes or replacing resources");
+      check(camera.position.equals(radiusPose)&&camera.quaternion.equals(radiusHeading)&&camera.projectionMatrix.equals(radiusLens)
+        &&g.controls.settings.gap===gapBefore&&g.controls.settings.thumbnailSize===sizeBefore,
+        "Radius leaves camera, Size and Gap settings unchanged for every destination");
+      radius?.setValue(10);
+      check(room.monitors.every((m,i)=>Math.abs(angle(m)-geometryBefore[i].angle)<1e-9),"returning Radius to 10 restores original angular panel sizes");
+    }
     const before=camera.quaternion.clone(),drag=events();
     interaction.down(drag);interaction.move({...drag,clientX:550});interaction.up({...drag,clientX:550,buttons:0,timeStamp:100});
     director.update(1/60);
@@ -203,18 +229,18 @@ try {
       "shared LMB drag looks around without moving the center or opening a lightbox");
     const size=g.controls.folder.controllers.find(c=>c.property==="thumbnailSize"),gap=g.controls.folder.controllers.find(c=>c.property==="gap");
     size.setValue(90+number*5);gap.setValue(number*2);
-    radius.setValue(10+number);
+    radius?.setValue(10+number);
     gap.setValue(0);gap.setValue(number*2);
-    check(g.controls.settings.sphereRadius===10+number&&room.monitors.every(m=>m.userData.mosaicRadius===10+number),
+    check(g.controls.settings.sphereRadius===(number===2?undefined:10+number)&&room.monitors.every(m=>m.userData.mosaicRadius===(number===2?10:10+number)),
       "Gap changes retain each destination's independent Radius");
     const otherSettings=JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings));
     g.controls.settings.reset();
-    check(g.controls.settings.thumbnailSize===100&&g.controls.settings.sphereRadius===10
+    check(g.controls.settings.thumbnailSize===100&&g.controls.settings.sphereRadius===(number===2?undefined:10)
       &&Math.abs(g.controls.settings.gap-g.controls.defaultGap)<1e-9&&camera.zoom===1
       &&room.monitors.every(m=>m.userData.mosaicRadius===10),"Reset restores Size, Gap and Radius for the active gallery");
     check(JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings))===otherSettings,
       "Reset leaves all other destination settings unchanged");
-    size.setValue(90+number*5);gap.setValue(number*2);radius.setValue(10+number);
+    size.setValue(90+number*5);gap.setValue(number*2);radius?.setValue(10+number);
     if(number%2)escape();else interaction.back.emit("click",{});
     check(!interaction.opened&&theme.earth.group.visible&&theme.satellites.group.visible&&!room.group.visible
       &&camera.position.distanceTo(home)<1e-9&&camera.getWorldDirection(new THREE.Vector3()).dot(heading)>.999999&&camera.zoom===1,
@@ -225,7 +251,7 @@ try {
   for(const config of EARTH_GALLERIES){
     const values=saved.folders["Gallery / "+config.name].controllers;
     check(values["Thumbnail Size (%)"]===90+config.number*5&&values["Gap (%)"]===config.number*2
-      &&values["Sphere Radius (units)"]===10+config.number,"native root Save isolates every destination's settings");
+      &&values["Sphere Radius (units)"]===(config.number===2?undefined:10+config.number),"native root Save isolates every destination's settings");
   }
   const requestCount=requests.length;
   for(let cycle=0;cycle<3;cycle++)for(const config of EARTH_GALLERIES){
@@ -234,7 +260,7 @@ try {
       "switching reuses bounded rooms and existing GUI folders with one overlay");
     check([...rooms.values()].filter(r=>r.group.visible).length===1&&window.listeners.length===baseListeners+6,
       "only selected room is visible; listener count stays fixed");
-    check(interaction.layoutControls.settings.thumbnailSize===90+config.number*5&&interaction.layoutControls.settings.gap===config.number*2&&interaction.layoutControls.settings.sphereRadius===10+config.number,
+    check(interaction.layoutControls.settings.thumbnailSize===90+config.number*5&&interaction.layoutControls.settings.gap===config.number*2&&interaction.layoutControls.settings.sphereRadius===(config.number===2?undefined:10+config.number),
       "switching preserves separate tuning values without lens drift");
     interaction.close();
   }
@@ -252,18 +278,18 @@ try {
   check(gui.folders.length===8&&window.listeners.length===baseListeners+6,"reinitialization replaces all seven folders and observers without duplication");
   gui.load(saved);
   check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.settings.thumbnailSize===90+g.config.number*5
-    &&g.controls.settings.gap===g.config.number*2&&g.controls.settings.sphereRadius===10+g.config.number),"root Load restores every destination before its room exists");
+    &&g.controls.settings.gap===g.config.number*2&&g.controls.settings.sphereRadius===(g.config.number===2?undefined:10+g.config.number)),"root Load restores every destination before its room exists");
   for(const number of [7,6,5,4,3,2,1]){
     clickSatellite(number);await interaction.room.ready;
-    check(Math.abs(camera.zoom-(90+number*5)/100)<1e-12&&interaction.layoutControls.settings.gap===number*2&&interaction.layoutControls.settings.sphereRadius===10+number
-      &&interaction.room.monitors.every(m=>m.userData.mosaicRadius===10+number),
+    check(Math.abs(camera.zoom-(90+number*5)/100)<1e-12&&interaction.layoutControls.settings.gap===number*2&&interaction.layoutControls.settings.sphereRadius===(number===2?undefined:10+number)
+      &&interaction.room.monitors.every(m=>m.userData.mosaicRadius===(number===2?10:10+number)),
       "restored settings apply only when the corresponding destination enters");
     interaction.close();
   }
   const legacy=JSON.parse(JSON.stringify(saved));
   for(const config of EARTH_GALLERIES)delete legacy.folders["Gallery / "+config.name].controllers["Sphere Radius (units)"];
   gui.load(legacy);
-  check([...interaction.galleries.values()].every(g=>g.controls.settings.sphereRadius===10
+  check([...interaction.galleries.values()].every(g=>g.controls.settings.sphereRadius===(g.config.number===2?undefined:10)
     &&g.controls.settings.thumbnailSize===90+g.config.number*5&&g.controls.settings.gap===g.config.number*2),
     "older presets without Radius restore safe defaults for all seven while retaining independent Size and Gap");
   for(const config of EARTH_GALLERIES){

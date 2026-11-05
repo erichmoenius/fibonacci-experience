@@ -134,8 +134,11 @@ function applyCell(monitor, cell, inset, basis = sectorBasis(cell.face)) {
   const x = (x0 + x1) / 2, y = (y0 + y1) / 2;
   const center = outward.clone().addScaledVector(right, x).addScaledVector(up, y);
   const radius = safeRadius(monitor.userData.mosaicRadius);
-  const radialScale = radius / center.length();
-  const scale = DEFAULT_GALLERY_RADIUS / center.length() * LOCAL_SCALE;
+  // Cube panels stay coplanar on each face; spherical panels keep their
+  // existing radial projection and scale unchanged.
+  const cube = monitor.userData.galleryLayout === "CUBE";
+  const radialScale = cube ? DEFAULT_GALLERY_RADIUS : radius / center.length();
+  const scale = (cube ? DEFAULT_GALLERY_RADIUS : DEFAULT_GALLERY_RADIUS / center.length()) * LOCAL_SCALE;
   const width = (x1 - x0) * (1 - inset) / LOCAL_SCALE;
   const height = (y1 - y0) * (1 - inset) / LOCAL_SCALE;
   monitor.position.copy(center).multiplyScalar(radialScale).addScaledVector(inward, -0.09 * scale);
@@ -173,6 +176,22 @@ export function layoutDenseGallery(monitors) {
       const tile = reflect(item, mirrors[face]);
       const { monitor, x0, x1, y0, y1 } = tile;
       // The loaded photo's local z=0.09 lands exactly on the radius-10 shell.
+      applyCell(monitor, { face, x0, x1, y0, y1 }, SEAM, basis);
+    }
+  });
+}
+
+/** Countries: six flat inward-facing walls, each ten units from the center.
+ * Reuse deterministic rectangular packing and existing meshes/materials. */
+export function layoutCubeGallery(monitors) {
+  let seed = 34075;
+  const random = () => ((seed = (1664525 * seed + 1013904223) >>> 0) / 4294967296);
+  const faceNames = ["front", "right", "back", "left", "ceiling", "floor"];
+  partition(monitors).forEach((group, face) => {
+    const basis = sectorBasis(face);
+    for (const { monitor, x0, x1, y0, y1 } of packSector(group, random)) {
+      monitor.userData.galleryLayout = "CUBE";
+      monitor.userData.cubeFace = faceNames[face];
       applyCell(monitor, { face, x0, x1, y0, y1 }, SEAM, basis);
     }
   });
@@ -248,6 +267,7 @@ export function setMosaicGap(monitors, gapPercent) {
 export function setMosaicRadius(monitors, radius) {
   const value = safeRadius(radius);
   for (const monitor of monitors) {
+    if (monitor.userData.galleryLayout === "CUBE") continue;
     const cell = monitor.userData.mosaicCell;
     const { outward, right, up, inward } = sectorBasis(cell.face);
     const center = outward.clone().addScaledVector(right, (cell.x0 + cell.x1) / 2)

@@ -3,8 +3,9 @@ import { DEFAULT_GALLERY_RADIUS, MIN_GALLERY_RADIUS, MAX_GALLERY_RADIUS, measure
 /** Existing Cities tuning lab, configurable for other gallery destinations. Lens magnification and angular tile spacing are
  * independent; this class never writes camera position or orientation. */
 export class CitiesGalleryControls {
-  constructor(gui, camera, { name = "Cities", radiusControl = true } = {}) {
+  constructor(gui, camera, { name = "Cities", radiusControl = true, layout = "SPHERICAL" } = {}) {
     this.name = name;
+    this.layout = layout;
     this.radiusControl = radiusControl;
     this.gui = gui;
     this.camera = camera;
@@ -65,7 +66,9 @@ export class CitiesGalleryControls {
     this.controllers[0].domElement.title = "Gallery-only lens magnification. Does not resize or overlap photo meshes.";
     this.controllers[1].domElement.title = this.radiusControl
       ? "Dark-area target at radius 10. Larger Radius increases actual gaps; Effective Gap reports them. Zero retains frame clearance."
-      : "Whole-sphere dark-area target. Zero retains a small safety seam around frames.";
+      : this.layout === "CUBE"
+        ? "Cube interior dark-area target. Zero retains a small safety seam around frames."
+        : "Whole-sphere dark-area target. Zero retains a small safety seam around frames.";
     folder.open();
   }
 

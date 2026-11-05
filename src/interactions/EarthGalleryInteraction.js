@@ -223,7 +223,7 @@ export class EarthGalleryInteraction {
   showControls() {
     const root = this.document.createElement("div");
     root.dataset.earthGallery = this.activeGallery.config.id;
-    root.setAttribute("role", "region"); root.setAttribute("aria-label", this.activeGallery.config.name.toUpperCase() + " spherical gallery");
+    root.setAttribute("role", "region"); root.setAttribute("aria-label", this.activeGallery.config.name.toUpperCase() + " " + this.activeGallery.config.layout.toLowerCase() + " gallery");
     root.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid #456176;border-radius:12px;background:#08121fea;color:#edf7ff;font:14px system-ui;max-width:calc(100vw - 24px);box-sizing:border-box;flex-wrap:wrap;justify-content:center";
     for (const name of ["pointerdown", "pointerup", "pointermove", "click", "wheel"]) root.addEventListener(name, event => event.stopPropagation());
     const button = (text, action) => {

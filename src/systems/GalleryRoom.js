@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { assignPhotos, loadCityTexture } from "./GalleryPhotos.js";
 
-import { layoutDenseGallery } from "./GalleryLayout.js";
+import { layoutDenseGallery, layoutCubeGallery } from "./GalleryLayout.js";
 
 const SEGMENTS = ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"];
 const BARS = {
@@ -14,7 +14,7 @@ const BARS = {
 /** Reusable photo gallery with numbered loading/error placeholders. Its shell has no enclosing surface. */
 export class GalleryRoom {
   constructor(container, { layout = "SPHERICAL", content = "cities", id = "cities", name = "Cities", photoLoader = loadCityTexture } = {}) {
-    if (layout !== "SPHERICAL") throw new Error("Unsupported gallery layout: " + layout);
+    if (!["SPHERICAL", "CUBE"].includes(layout)) throw new Error("Unsupported gallery layout: " + layout);
     if (!["cities", "placeholders"].includes(content)) throw new Error("Unsupported gallery content: " + content);
     this.layout = layout;
     this.content = content;
@@ -94,7 +94,8 @@ export class GalleryRoom {
       monitor.userData.photoStatus = content === "cities" ? "loading" : "placeholder";
       if (content === "placeholders") monitor.name = name + " · Panel " + (i + 1);
     });
-    layoutDenseGallery(this.monitors);
+    if (layout === "CUBE") layoutCubeGallery(this.monitors);
+    else layoutDenseGallery(this.monitors);
     if (content === "placeholders") {
       this.ready = Promise.resolve();
       return;
