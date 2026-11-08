@@ -38,11 +38,11 @@ export function assignPhotos(monitors, photos = CITY_PHOTOS) {
   return assigned.map(index => photos[index]);
 }
 
-export async function loadCityTexture(photo, signal) {
+export async function loadCityTexture(photo, signal, mediaBase = CITY_MEDIA_BASE) {
   // ImageBitmap performs bounded decode/resize before GPU upload. Do not retain
   // original-size image elements or canvases for every repeated monitor.
   if (typeof createImageBitmap !== "function") throw new Error("ImageBitmap unavailable");
-  const response = await fetch(CITY_MEDIA_BASE + photo.path, { signal, mode: "cors" });
+  const response = await fetch(mediaBase + photo.path, { signal, mode: "cors" });
   if (!response.ok) throw new Error("Photo HTTP " + response.status);
   const blob = await response.blob();
   if (signal.aborted) throw new Error("Photo cancelled");

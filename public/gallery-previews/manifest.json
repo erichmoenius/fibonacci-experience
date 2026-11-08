@@ -1,0 +1,47 @@
+[
+  {
+    "collection": "animals",
+    "originalPath": "crocodile_01.JPG",
+    "originalSHA256": "d464e48da2e0e3fce148162c8743f99ffb6ec16160fdbdfebe528f25c78f5e55",
+    "servedPath": "public/gallery-previews/animals/crocodile_01.JPG",
+    "servedSHA256": "d464e48da2e0e3fce148162c8743f99ffb6ec16160fdbdfebe528f25c78f5e55",
+    "processing": "Byte-for-byte copy: remote uppercase JPG response lacks CORS headers.",
+    "originalArchiveUnchanged": true
+  },
+  {
+    "collection": "events",
+    "originalPath": "hiroshima_01.tif",
+    "originalSHA256": "ede84e16ebee4c91e032eb85aa6809628bbe217e44d59294e498f860cb955f2d",
+    "servedPath": "public/gallery-previews/events/hiroshima_01.png",
+    "servedSHA256": "5a984ea0323eda9efffae3ac4b78b503362e4dde77a8fd1ea3552bf8f1a71660",
+    "processing": "Full image, aspect-preserving high-quality bicubic resize to maximum 1024 pixels; TIFF to PNG.",
+    "originalArchiveUnchanged": true
+  },
+  {
+    "collection": "events",
+    "originalPath": "slavery_01.tif",
+    "originalSHA256": "790f8a62334848b6321a8825c5211cffcb634a86481c77f4bc0cfd910bc77227",
+    "servedPath": "public/gallery-previews/events/slavery_01.png",
+    "servedSHA256": "5622838d2000801222fd0a4207e321f4914eb8a5e41bbb1c7c93427b4768f7ce",
+    "processing": "Full image, aspect-preserving high-quality bicubic resize to maximum 1024 pixels; TIFF to PNG.",
+    "originalArchiveUnchanged": true
+  },
+  {
+    "collection": "events",
+    "originalPath": "execution_01.tif",
+    "originalSHA256": "93b6814b730efbc357d32a63b8ab7f1765c48907e7e392a35aedccf162fd5118",
+    "servedPath": "public/gallery-previews/events/execution_01.png",
+    "servedSHA256": "f9e90200c37b70206f77d475a363a5b3ec6dfc3bd79a12acaa45bcad9e408b6d",
+    "processing": "Full image, aspect-preserving high-quality bicubic resize to maximum 1024 pixels; TIFF to PNG.",
+    "originalArchiveUnchanged": true
+  },
+  {
+    "collection": "ethnicity",
+    "originalPath": "aboriginal_01.tif",
+    "originalSHA256": "e0b993ed9b7c340a10e2345937f89c7da57b075aadafe12d35f934e7151c7ef2",
+    "servedPath": "public/gallery-previews/ethnicity/aboriginal_01.png",
+    "servedSHA256": "ba0fcb9b3d792429b712ccb618624834e7f76dada9072ad7b307e70e1f81506e",
+    "processing": "Full image, aspect-preserving high-quality bicubic resize to maximum 1024 pixels; TIFF to PNG.",
+    "originalArchiveUnchanged": true
+  }
+]

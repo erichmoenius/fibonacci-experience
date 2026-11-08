@@ -48,8 +48,9 @@ const output = { log: console.log, warn: console.warn, trace: console.trace };
 console.log = console.warn = console.trace = () => {};
 globalThis.window = new Surface();
 window.innerWidth = window.innerHeight = 1000;
-globalThis.document = Object.assign(new Surface(), { createElement: () => new Surface(), body: new Surface(), activeElement: null });
-globalThis.localStorage = { getItem: () => null };
+globalThis.document = Object.assign(new Surface(), { createElement: () => new Surface(), createTextNode: text => Object.assign(new Surface(), { textContent: text }), body: new Surface(), activeElement: null });
+const presetStorage = new Map();
+globalThis.localStorage = { getItem: key => presetStorage.get(key) ?? null, setItem: (key,value) => presetStorage.set(key,value) };
 const textureLoad = THREE.TextureLoader.prototype.load;
 THREE.TextureLoader.prototype.load = function (_url, ready) { ready(new THREE.Texture({ width: 4096, height: 2048 })); };
 let checks = 0;
@@ -94,6 +95,8 @@ try {
   const baseListeners=window.listeners.length;
   theme.initializeFlightControls({cameraDirector:director});
   let interaction=theme.galleryInteraction;
+  interaction.update();
+  check([...interaction.galleries.values()].every(g=>g.controls.folder.hidden),"no gallery folder is visible before first entry");
   const events=extra=>({target:canvas,pointerId:41,button:0,buttons:1,timeStamp:0,clientX:500,clientY:500,
     preventDefault(){},stopImmediatePropagation(){this.stopped=true;},...extra});
   const at=object=>{
@@ -118,9 +121,9 @@ try {
   };
   check(EARTH_GALLERIES.length===7&&interaction.galleries.size===7,"seven configuration records share one interaction owner");
   check(EARTH_GALLERIES.every((c,i)=>c.number===EARTH_SATELLITES[i].number&&c.name.toUpperCase()===EARTH_SATELLITES[i].title
-    &&c.layout===(c.number===2?"CUBE":"SPHERICAL")),"configuration matches all satellite identities with Countries cube and unchanged spherical layouts");
-  check(EARTH_GALLERIES.map(c=>c.plannedLayout).join(",")==="SPHERICAL,CUBE,IMMERSIVE_SPHERE,SPIRAL,TIMELINE_TUNNEL,CONSTELLATION,SPHERICAL",
-    "future independent personalities are recorded without enabling new layouts");
+    &&c.layout===(c.number===2?"CUBE":c.number===3?"IMMERSIVE_SPHERE":c.number===4?"SPIRAL":c.number===5?"TIMELINE_TUNNEL":c.number===6?"CONSTELLATION":c.number===7?"PHYLLOTAXIS":"SPHERICAL")),"configuration matches all satellite identities with Countries cube, Water immersive sphere, Animals spiral, Events tunnel, Ethnicity constellation and Plants phyllotaxis");
+  check(EARTH_GALLERIES.map(c=>c.plannedLayout).join(",")==="SPHERICAL,CUBE,IMMERSIVE_SPHERE,SPIRAL,TIMELINE_TUNNEL,CONSTELLATION,PHYLLOTAXIS",
+    "all seven independent gallery personalities are recorded");
   check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.folder.hidden)&&gui.folders.length===8,
     "rooms are lazy; seven distinct settings folders register once before root Settings Load");
   check(window.listeners.length===baseListeners+6,"one set of six interaction listeners serves all destinations");
@@ -139,8 +142,9 @@ try {
   check(!interaction.hit(at(second)),"Earth blocks a satellite on its far side");
   second.position.copy(savedSecond);
   const baseline=new GalleryRoom(new THREE.Group(),{photoLoader:async()=>new THREE.Texture()});await baseline.ready;
+  const baselineControls=new CitiesGalleryControls(null,new THREE.PerspectiveCamera(),EARTH_GALLERIES[0],{getItem:()=>null});baselineControls.enter(baseline);await Promise.resolve();
   const baselineTiles=baseline.monitors.map(m=>({position:m.position.clone(),scale:m.scale.clone(),quaternion:m.quaternion.clone(),
-    width:m.userData.panelSize.width,height:m.userData.panelSize.height,photo:m.userData.photo}));baseline.dispose();
+    width:m.userData.panelSize.width,height:m.userData.panelSize.height,photo:m.userData.photo}));baselineControls.dispose();baseline.dispose();
   const rooms=new Map();
   // Countries preserves stationary-click discrimination and arbitrary entry poses.
   const countriesPress=at(second);
@@ -154,7 +158,7 @@ try {
   const customPose={position:new THREE.Vector3(1.5,-0.8,14),lookTarget:new THREE.Vector3(-2,1,-3)};
   director.returnHome(customPose,true);
   const customHeading=camera.getWorldDirection(new THREE.Vector3());
-  check(interaction.open(2),"Countries can enter from an arbitrary exploration pose");
+  check(interaction.open(2),"Countries can enter from an arbitrary exploration pose");await interaction.room.ready;
   director.update(1/60);
   check(camera.position.distanceTo(customPose.position)<1e-9,"cube inspection holds the actual entry position");
   const cubeLook=events();
@@ -165,94 +169,151 @@ try {
     &&camera.getWorldDirection(new THREE.Vector3()).dot(customHeading)>.999999
     &&director.mode==="explore"&&director.freeFlight.active,"cube exit restores arbitrary entry position, heading and flight ownership");
   director.returnHome(theme.getHomePose(),true);
-  // Visit placeholders before Cities to prove they start no city media workers.
+  const waterPress=at(theme.satellites.satellites[2]);
+  interaction.down(waterPress);interaction.move({...waterPress,clientX:waterPress.clientX+12});
+  interaction.up({...waterPress,clientX:waterPress.clientX+12,buttons:0,timeStamp:100});
+  check(!interaction.opened,"Water entry rejects flight drags");
+  interaction.down(waterPress);interaction.up({...waterPress,buttons:0,timeStamp:500});
+  check(!interaction.opened,"Water entry rejects long presses");
+  director.returnHome(customPose,true);
+  const waterHeading=camera.getWorldDirection(new THREE.Vector3());
+  check(interaction.open(3),"Water enters from an arbitrary rendered pose");await interaction.room.ready;director.update(1/60);
+  check(camera.position.distanceTo(customPose.position)<1e-9,"Water holds the visitor at the actual center");
+  interaction.layoutControls.settings.gap=30;interaction.layoutControls.applyGap();
+  interaction.layoutControls.settings.radius=20;interaction.layoutControls.applyRadius();
+  interaction.layoutControls.settings.reset();interaction.close();
+  check(camera.position.distanceTo(customPose.position)<1e-9
+    &&camera.getWorldDirection(new THREE.Vector3()).dot(waterHeading)>.999999
+    &&director.mode==="explore"&&director.freeFlight.active&&camera.zoom===1,
+    "Water restores entry position, heading, lens and flight after controls/reset/return");
+  director.returnHome(theme.getHomePose(),true);
+  const eventsPress=at(theme.satellites.satellites[4]);
+  interaction.down(eventsPress);interaction.move({...eventsPress,clientX:eventsPress.clientX+12});
+  interaction.up({...eventsPress,clientX:eventsPress.clientX+12,buttons:0,timeStamp:100});
+  check(!interaction.opened,"Events entry rejects flight drags");
+  interaction.down(eventsPress);interaction.up({...eventsPress,buttons:0,timeStamp:500});
+  check(!interaction.opened,"Events entry rejects long presses");
+  director.returnHome(customPose,true);
+  const eventsHeading=camera.getWorldDirection(new THREE.Vector3());
+  check(interaction.open(5),"Events enters from an arbitrary rendered pose");await interaction.room.ready;director.update(1/60);
+  check(camera.position.distanceTo(customPose.position)<1e-9&&interaction.room.getCenter().distanceTo(customPose.position)<1e-9,
+    "timeline tunnel retains the actual visitor center without a camera jump");
+  interaction.layoutControls.settings.gap=30;interaction.layoutControls.applyGap();
+  interaction.layoutControls.settings.pictureSize=125;interaction.layoutControls.applySize();
+  interaction.layoutControls.reset();interaction.close();
+  check(camera.position.distanceTo(customPose.position)<1e-9
+    &&camera.getWorldDirection(new THREE.Vector3()).dot(eventsHeading)>.999999
+    &&director.mode==="explore"&&director.freeFlight.active&&camera.zoom===1,
+    "Events restores arbitrary entry position, heading, lens and flight after controls/reset/return");
+  director.returnHome(theme.getHomePose(),true);
+  const constellationPress=at(theme.satellites.satellites[5]);
+  interaction.down(constellationPress);interaction.move({...constellationPress,clientX:constellationPress.clientX+12});
+  interaction.up({...constellationPress,clientX:constellationPress.clientX+12,buttons:0,timeStamp:100});
+  check(!interaction.opened,"Ethnicity entry rejects flight drags");
+  interaction.down(constellationPress);interaction.up({...constellationPress,buttons:0,timeStamp:500});
+  check(!interaction.opened,"Ethnicity entry rejects long presses");
+  director.returnHome(customPose,true);
+  const constellationHeading=camera.getWorldDirection(new THREE.Vector3());
+  check(interaction.open(6),"Ethnicity enters from an arbitrary rendered pose");await interaction.room.ready;director.update(1/60);
+  check(camera.position.distanceTo(customPose.position)<1e-9&&interaction.room.getCenter().distanceTo(customPose.position)<1e-9,
+    "constellation retains the actual visitor center without a camera jump");
+  interaction.layoutControls.settings.gap=30;interaction.layoutControls.applyGap();
+  interaction.layoutControls.settings.pictureSize=125;interaction.layoutControls.applySize();
+  interaction.layoutControls.reset();interaction.close();
+  check(camera.position.distanceTo(customPose.position)<1e-9
+    &&camera.getWorldDirection(new THREE.Vector3()).dot(constellationHeading)>.999999
+    &&director.mode==="explore"&&director.freeFlight.active&&camera.zoom===1,
+    "Ethnicity restores arbitrary entry position, heading, lens and flight after controls/reset/return");
+  director.returnHome(theme.getHomePose(),true);
+  const plantsPress=at(theme.satellites.satellites[6]);
+  interaction.down(plantsPress);interaction.move({...plantsPress,clientX:plantsPress.clientX+12});
+  interaction.up({...plantsPress,clientX:plantsPress.clientX+12,buttons:0,timeStamp:100});
+  check(!interaction.opened,"Plants entry rejects flight drags");
+  interaction.down(plantsPress);interaction.up({...plantsPress,buttons:0,timeStamp:500});
+  check(!interaction.opened,"Plants entry rejects long presses");
+  director.returnHome(customPose,true);
+  const plantsHeading=camera.getWorldDirection(new THREE.Vector3());
+  check(interaction.open(7),"Plants enters from an arbitrary rendered pose");await interaction.room.ready;director.update(1/60);
+  check(camera.position.distanceTo(customPose.position)<1e-9&&interaction.room.getCenter().distanceTo(customPose.position)<1e-9,
+    "botanical dome retains the actual visitor center without a camera jump");
+  interaction.layoutControls.settings.gap=30;interaction.layoutControls.applyGap();
+  interaction.layoutControls.settings.pictureSize=125;interaction.layoutControls.applySize();
+  interaction.layoutControls.reset();interaction.close();
+  check(camera.position.distanceTo(customPose.position)<1e-9
+    &&camera.getWorldDirection(new THREE.Vector3()).dot(plantsHeading)>.999999
+    &&director.mode==="explore"&&director.freeFlight.active&&camera.zoom===1,
+    "Plants restores arbitrary entry position, heading, lens and flight after controls/reset/return");
+  director.returnHome(theme.getHomePose(),true);
+  // Visit every collection before Cities to verify collection isolation.
   for(const number of [2,3,4,5,6,7,1]){
     clickSatellite(number);
     const g=interaction.activeGallery,room=interaction.room;await room.ready;
     rooms.set(number,room);
     check(room instanceof GalleryRoom&&room.layout===g.config.layout&&room.monitors.length===75,"shared room builds 75 panels in the selected layout for "+g.config.name);
-    check(new Set(room.monitors.map(m=>m.userData.number)).size===75&&room.monitors.every(m=>number===1
-      ? m.children.slice(2,-1).every(c=>!c.visible)&&m.children.at(-1).visible : m.children.slice(2).some(c=>c.visible)),
-      number===1?"Cities retains its hidden loading glyphs":"placeholder panels have distinct visible mesh numbers");
+    check(new Set(room.monitors.map(m=>m.userData.number)).size===75&&room.monitors.every(m=>m.children.slice(2,-1).every(c=>!c.visible)&&m.children.at(-1).visible),
+      "All photo galleries retain hidden loading glyphs and visible photo planes");
     check(interaction.controls.dataset.earthGallery===g.config.id&&interaction.controls.children[0].textContent.startsWith(g.config.name.toUpperCase()),
       "destination identity appears in existing gallery overlay");
     check([...interaction.galleries.values()].filter(x=>x.controls.visible).length===1&&g.controls.visible,"only active destination GUI is visible");
     check(room.getCenter().distanceTo(home)<1e-9&&camera.position.distanceTo(home)<1e-9,"CameraDirector holds the visitor at the unchanged center");
-    if(number!==1){
-      check(room.content==="placeholders"&&room.photoMaterials.size===0&&!room.photoGeometry&&room.monitors.every(m=>m.userData.photoStatus==="placeholder"
-        &&m.userData.photo.path.startsWith(g.config.id+"/placeholder-")&&m.children.every(c=>!c.material.map)),"placeholder destinations contain no Cities photographs or textures");
-      check(requests.length===0&&bitmaps.length===0,"placeholder destinations launch zero media requests/decodes");
-
-      check(!interaction.openLightbox(room.monitors[0])&&!interaction.hitPhoto(events()),"placeholders cannot open an empty lightbox");
-    }else{
-      check(requests.length===20&&room.photoMaterials.size===20,"Cities retains its original twenty shared photo textures");
+    {
+      check(room.content===g.config.id&&room.photoMaterials.size===(number===1?20:12),"each gallery uses its own collection and shared textures");
+      if(number===1){
       check(room.monitors.every((m,i)=>m.position.distanceTo(baselineTiles[i].position)<1e-9&&m.scale.distanceTo(baselineTiles[i].scale)<1e-9
         &&m.quaternion.equals(baselineTiles[i].quaternion)&&m.userData.photo===baselineTiles[i].photo
         &&Math.abs(m.userData.panelSize.width-baselineTiles[i].width)<1e-8&&Math.abs(m.userData.panelSize.height-baselineTiles[i].height)<1e-8),
         "Cities preserves original photo assignment, transforms, aspect ratios and dimensions");
-      const e=findPhotoPixel();check(!!e,"Cities has a selectable real photo pixel");
+      }else{
+        const counts=[...room.photoMaterials.keys()].map(path=>room.monitors.filter(m=>m.userData.photo.path===path).length);
+        check(counts.every(n=>n===6||n===7)&&counts.filter(n=>n===7).length===3,"Countries and Water balance twelve originals across all 75 panels");
+      }
+      const e=findPhotoPixel();check(!!e,"photo gallery has a selectable loaded photo pixel");
       interaction.down(e);interaction.up({...e,buttons:0,timeStamp:100});interaction.update();
       check(!!interaction.lightbox&&g.controls.folder.hidden,"shared short-click path opens Cities lightbox and hides its GUI");
-      escape();interaction.update();check(!interaction.lightbox&&interaction.opened&&!g.controls.folder.hidden,"first ESC returns from lightbox to Cities");
+      if(number!==1){
+        const photo=interaction.lightbox.photo,caption=interaction.lightbox.root.children.at(-1),credit=caption.children[0];
+        check(interaction.lightbox.root.dataset.earthLightbox===g.config.id&&credit.children.filter(c=>c.href).length===2
+          &&credit.children.some(c=>c.href===photo.source)&&credit.children.some(c=>c.href===photo.licenseURL),
+          "photo lightboxes retain real creators and clickable source/license attribution");
+        if(number===2) check(credit.children[0].textContent.startsWith(photo.attribution)
+          &&interaction.lightbox.group.name==="CountriesPhotoLightbox", "Countries exposes its exact full archive attribution in the existing lightbox");
+      }
+      escape();interaction.update();check(!interaction.lightbox&&interaction.opened&&!g.controls.folder.hidden,"first ESC returns from lightbox to its photo gallery");
     }
-    const radius=g.controls.folder.controllers.find(c=>c.property==="sphereRadius");
-    check(number===2 ? !g.controls.radiusControl&&!radius&&g.controls.settings.sphereRadius===undefined
-      : g.controls.radiusControl&&radius&&radius.min===10&&radius.max===20&&g.controls.settings.sphereRadius===10,
-      "Countries omits Sphere Radius; all spherical destinations retain the safe shared control");
-    if(radius){
-      room.group.updateWorldMatrix(true,true);
-      const panelSurface=m=>m.userData.photoStatus==="ready"?m.children.at(-1):m.children[1];
-      const angle=m=>{
-        const surface=panelSurface(m),center=room.getCenter();
-        return surface.localToWorld(new THREE.Vector3(-.5,-.5,0)).sub(center)
-          .angleTo(surface.localToWorld(new THREE.Vector3(.5,.5,0)).sub(center));
-      };
-      const geometryBefore=room.monitors.map(m=>({scale:m.scale.clone(),surfaceScale:panelSurface(m).scale.clone(),
-        angle:angle(m),quaternion:m.quaternion.clone(),geometry:panelSurface(m).geometry,material:panelSurface(m).material}));
-      const radiusPose=camera.position.clone(),radiusHeading=camera.quaternion.clone(),radiusLens=camera.projectionMatrix.clone(),
-        gapBefore=g.controls.settings.gap,sizeBefore=g.controls.settings.thumbnailSize;
-      radius?.setValue(20);
-      check(room.monitors.every((m,i)=>m.scale.equals(geometryBefore[i].scale)&&panelSurface(m).scale.equals(geometryBefore[i].surfaceScale)
-        &&m.quaternion.equals(geometryBefore[i].quaternion)&&panelSurface(m).geometry===geometryBefore[i].geometry
-        &&panelSurface(m).material===geometryBefore[i].material&&angle(m)<geometryBefore[i].angle*.75),
-        "every destination visibly reduces panel angular size at Radius 20 without scaling meshes or replacing resources");
-      check(camera.position.equals(radiusPose)&&camera.quaternion.equals(radiusHeading)&&camera.projectionMatrix.equals(radiusLens)
-        &&g.controls.settings.gap===gapBefore&&g.controls.settings.thumbnailSize===sizeBefore,
-        "Radius leaves camera, Size and Gap settings unchanged for every destination");
-      radius?.setValue(10);
-      check(room.monitors.every((m,i)=>Math.abs(angle(m)-geometryBefore[i].angle)<1e-9),"returning Radius to 10 restores original angular panel sizes");
-    }
+    const radius=g.controls.folder.controllers.find(c=>c.property==="radius");
+    check(g.controls.controllers.length===3&&!!radius,"all seven destinations expose three physical sliders");
+    const lens=camera.projectionMatrix.clone(),radiusPose=camera.position.clone();
+    radius.setValue(5);
+    check(camera.position.equals(radiusPose)&&camera.projectionMatrix.equals(lens),"geometry-specific distance leaves camera and lens unchanged");
+    g.controls.reset();
+    const wheelFov=camera.fov,layoutBeforeZoom=JSON.stringify(room.monitors.map(m=>m.position.toArray()));
+    interaction.opticalZoom.wheel({target:canvas,deltaY:-300,preventDefault(){},stopPropagation(){}});
+    interaction.opticalZoom.update(1/60);
+    check(camera.fov<wheelFov&&JSON.stringify(room.monitors.map(m=>m.position.toArray()))===layoutBeforeZoom,"gallery wheel zoom changes FOV without moving panels");
     const before=camera.quaternion.clone(),drag=events();
     interaction.down(drag);interaction.move({...drag,clientX:550});interaction.up({...drag,clientX:550,buttons:0,timeStamp:100});
     director.update(1/60);
     check(!camera.quaternion.equals(before)&&camera.position.distanceTo(home)<1e-9&&!interaction.lightbox&&!interaction.lookPointer,
       "shared LMB drag looks around without moving the center or opening a lightbox");
-    const size=g.controls.folder.controllers.find(c=>c.property==="thumbnailSize"),gap=g.controls.folder.controllers.find(c=>c.property==="gap");
-    size.setValue(90+number*5);gap.setValue(number*2);
-    radius?.setValue(10+number);
-    gap.setValue(0);gap.setValue(number*2);
-    check(g.controls.settings.sphereRadius===(number===2?undefined:10+number)&&room.monitors.every(m=>m.userData.mosaicRadius===(number===2?10:10+number)),
-      "Gap changes retain each destination's independent Radius");
+    const size=g.controls.folder.controllers.find(c=>c.property==="pictureSize"),gap=g.controls.folder.controllers.find(c=>c.property==="gap");
     const otherSettings=JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings));
-    g.controls.settings.reset();
-    check(g.controls.settings.thumbnailSize===100&&g.controls.settings.sphereRadius===(number===2?undefined:10)
-      &&Math.abs(g.controls.settings.gap-g.controls.defaultGap)<1e-9&&camera.zoom===1
-      &&room.monitors.every(m=>m.userData.mosaicRadius===10),"Reset restores Size, Gap and Radius for the active gallery");
-    check(JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings))===otherSettings,
-      "Reset leaves all other destination settings unchanged");
-    size.setValue(90+number*5);gap.setValue(number*2);radius?.setValue(10+number);
+    radius.setValue(number*.5);size.setValue(80+number);gap.setValue(number*2);
+    check(camera.zoom===1&&g.controls.settings.radius===number*.5,"physical Size and Gap retain independent distance and lens");
+    check(g.controls.save(),"active satellite preset saves independently");
+    g.expectedSettings={pictureSize:g.controls.settings.pictureSize,gap:g.controls.settings.gap,radius:g.controls.settings.radius};
+    g.controls.reset();
+    check(g.controls.settings.pictureSize===g.controls.home.pictureSize&&g.controls.settings.gap===g.controls.home.gap&&g.controls.settings.radius===g.controls.home.radius&&camera.zoom===1,"Reset restores physical factory composition");
+    check(JSON.stringify([...interaction.galleries.values()].filter(other=>other!==g).map(other=>other.controls.settings))===otherSettings,"Reset leaves other satellites unchanged");
+    check(g.controls.load()&&Object.entries(g.expectedSettings).every(([k,v])=>g.controls.settings[k]===v),"active Load restores only its own saved preset");
     if(number%2)escape();else interaction.back.emit("click",{});
     check(!interaction.opened&&theme.earth.group.visible&&theme.satellites.group.visible&&!room.group.visible
-      &&camera.position.distanceTo(home)<1e-9&&camera.getWorldDirection(new THREE.Vector3()).dot(heading)>.999999&&camera.zoom===1,
+      &&camera.position.distanceTo(home)<1e-9&&camera.getWorldDirection(new THREE.Vector3()).dot(heading)>.999999&&camera.zoom===1&&camera.fov===60,
       "ESC/Back restores Earth, original lens and pose for "+g.config.name);
     check(document.body.children.length===0&&window.listeners.length===baseListeners+6,"closing removes overlay without accumulating listeners");
   }
   const saved=JSON.parse(JSON.stringify(gui.save()));
-  for(const config of EARTH_GALLERIES){
-    const values=saved.folders["Gallery / "+config.name].controllers;
-    check(values["Thumbnail Size (%)"]===90+config.number*5&&values["Gap (%)"]===config.number*2
-      &&values["Sphere Radius (units)"]===(config.number===2?undefined:10+config.number),"native root Save isolates every destination's settings");
-  }
+  const expectedPresets=new Map([...interaction.galleries.values()].map(g=>[g.config.number,g.expectedSettings]));
+  for(const config of EARTH_GALLERIES)check(Object.keys(saved.folders["Gallery / "+config.name].controllers).length===0,"root Save cannot mix gallery presets");
   const requestCount=requests.length;
   for(let cycle=0;cycle<3;cycle++)for(const config of EARTH_GALLERIES){
     clickSatellite(config.number);
@@ -260,11 +321,10 @@ try {
       "switching reuses bounded rooms and existing GUI folders with one overlay");
     check([...rooms.values()].filter(r=>r.group.visible).length===1&&window.listeners.length===baseListeners+6,
       "only selected room is visible; listener count stays fixed");
-    check(interaction.layoutControls.settings.thumbnailSize===90+config.number*5&&interaction.layoutControls.settings.gap===config.number*2&&interaction.layoutControls.settings.sphereRadius===(config.number===2?undefined:10+config.number),
-      "switching preserves separate tuning values without lens drift");
+    check(Object.entries(expectedPresets.get(config.number)).every(([k,v])=>interaction.layoutControls.settings[k]===v)&&camera.zoom===1,"switching retains independent physical values without lens drift");
     interaction.close();
   }
-  check(requests.length===requestCount&&bitmaps.length===20,"repeated gallery switching performs zero additional photo downloads/decodes");
+  check(requests.length===requestCount&&bitmaps.length===92,"repeated gallery switching performs zero additional photo downloads/decodes");
   const watched=new Map();
   for(const room of rooms.values()){
     room.group.traverse(o=>{for(const resource of [o.geometry,o.material,o.material?.map].filter(Boolean)){
@@ -277,40 +337,17 @@ try {
   interaction=theme.galleryInteraction;
   check(gui.folders.length===8&&window.listeners.length===baseListeners+6,"reinitialization replaces all seven folders and observers without duplication");
   gui.load(saved);
-  check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.settings.thumbnailSize===90+g.config.number*5
-    &&g.controls.settings.gap===g.config.number*2&&g.controls.settings.sphereRadius===(g.config.number===2?undefined:10+g.config.number)),"root Load restores every destination before its room exists");
-  for(const number of [7,6,5,4,3,2,1]){
-    clickSatellite(number);await interaction.room.ready;
-    check(Math.abs(camera.zoom-(90+number*5)/100)<1e-12&&interaction.layoutControls.settings.gap===number*2&&interaction.layoutControls.settings.sphereRadius===(number===2?undefined:10+number)
-      &&interaction.room.monitors.every(m=>m.userData.mosaicRadius===(number===2?10:10+number)),
-      "restored settings apply only when the corresponding destination enters");
+  check([...interaction.galleries.values()].every(g=>!g.room&&g.controls.settings.pictureSize===g.controls.home.pictureSize),"root Load leaves independent defaults alone");
+  for(const config of EARTH_GALLERIES){clickSatellite(config.number);await interaction.room.ready;
+    check(Object.entries(expectedPresets.get(config.number)).every(([k,v])=>interaction.layoutControls.settings[k]===v)&&camera.zoom===1,"new theme lifecycle restores only active saved gallery");
     interaction.close();
   }
-  const legacy=JSON.parse(JSON.stringify(saved));
-  for(const config of EARTH_GALLERIES)delete legacy.folders["Gallery / "+config.name].controllers["Sphere Radius (units)"];
-  gui.load(legacy);
-  check([...interaction.galleries.values()].every(g=>g.controls.settings.sphereRadius===(g.config.number===2?undefined:10)
-    &&g.controls.settings.thumbnailSize===90+g.config.number*5&&g.controls.settings.gap===g.config.number*2),
-    "older presets without Radius restore safe defaults for all seven while retaining independent Size and Gap");
-  for(const config of EARTH_GALLERIES){
-    clickSatellite(config.number);
-    check(interaction.room.monitors.every(m=>m.userData.mosaicRadius===10),"legacy default radius applies on entry for every destination");
-    interaction.close();
-  }
-  clickSatellite(3);
-  gui.load(saved);
-  check(interaction.layoutControls.settings.sphereRadius===13&&interaction.room.monitors.every(m=>m.userData.mosaicRadius===13)
-    &&Math.abs(camera.zoom-1.05)<1e-12,"existing root Load restores active Water controls and meshes live");
-  gui.load(legacy);
-  check(interaction.layoutControls.settings.sphereRadius===10&&interaction.room.monitors.every(m=>m.userData.mosaicRadius===10),
-    "older preset without Radius safely restores the active gallery live");
-  interaction.close();
   clickSatellite(4);
   theme.destroy();interaction.dispose();
   check(window.listeners.length===baseListeners&&document.body.children.length===0&&container.children.length===0&&gui.folders.length===0
     &&bitmaps.every(b=>b.closes===1),"theme exit while a placeholder gallery is open cleans all rooms, controls, listeners and media exactly once");
-  output.log(JSON.stringify({result:"PASS",checks,destinations:7,placeholderDestinations:6,panelsPerDestination:75,
-    repeatedSwitches:21,initialCityRequests:requestCount,scope:"real geometry, CameraDirector, raycasting and native GUI serialization; DOM/HTTP doubles; no browser visual claim"}));
+  output.log(JSON.stringify({result:"PASS",checks,destinations:7,placeholderDestinations:0,panelsPerDestination:75,
+    repeatedSwitches:21,initialCityRequests:20,initialCountriesRequests:12,initialWaterRequests:12,initialOtherSatelliteRequests:48,totalInitialPhotoRequests:requestCount,scope:"real geometry, CameraDirector, raycasting and native GUI serialization; DOM/HTTP doubles; no browser visual claim"}));
 }finally{
   THREE.TextureLoader.prototype.load=textureLoad;Object.assign(console,output);
   globalThis.fetch=originalFetch;

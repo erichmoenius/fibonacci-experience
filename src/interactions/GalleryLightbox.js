@@ -8,7 +8,8 @@ export class GalleryLightbox {
     this.photo = monitor.userData.photo;
     this.previousFocus = documentRoot.activeElement;
     this.group = new THREE.Group();
-    this.group.name = "CitiesPhotoLightbox";
+    this.group.name = this.photo.collection
+      ? this.photo.collection[0].toUpperCase() + this.photo.collection.slice(1) + "PhotoLightbox" : "CitiesPhotoLightbox";
     this.group.matrixAutoUpdate = false;
     container.add(this.group);
     this.dimMaterial = new THREE.MeshBasicMaterial({
@@ -30,7 +31,7 @@ export class GalleryLightbox {
     this.group.add(this.dim, this.screen);
 
     const root = documentRoot.createElement("div");
-    root.dataset.earthLightbox = "cities";
+    root.dataset.earthLightbox = this.photo.collection ?? "cities";
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-label", this.photo.city.replaceAll("_", " ") + " · " + this.photo.title);
@@ -54,6 +55,19 @@ export class GalleryLightbox {
     const caption = documentRoot.createElement("div");
     caption.textContent = this.photo.city.replaceAll("_", " ") + " · " + this.photo.title;
     caption.style.cssText = "position:absolute;bottom:18px;left:24px;right:24px;color:#edf7ff;font:13px system-ui;text-align:center;pointer-events:none";
+    if (this.photo.collection) {
+      const credit = documentRoot.createElement("div");
+      credit.style.cssText = "margin-top:4px;font-size:11px;pointer-events:auto";
+      credit.appendChild(documentRoot.createTextNode((this.photo.collection === "water" ? this.photo.photographer : this.photo.attribution) + " · "));
+      for (const [label, url] of [["Source", this.photo.source], [this.photo.license, this.photo.licenseURL]]) {
+        const link = documentRoot.createElement("a");
+        link.textContent = label; link.href = url; link.target = "_blank"; link.rel = "noopener noreferrer";
+        link.style.color = "#bce7ff";
+        credit.appendChild(link); credit.appendChild(documentRoot.createTextNode(" "));
+      }
+      if (this.photo.previewNotice) credit.appendChild(documentRoot.createTextNode(this.photo.previewNotice));
+      caption.appendChild(credit);
+    }
     root.appendChild(caption);
     this.root = root; this.imageArea = imageArea; this.closeButton = close;
     documentRoot.body.appendChild(root);

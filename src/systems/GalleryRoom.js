@@ -1,7 +1,15 @@
 import * as THREE from "three";
 import { assignPhotos, loadCityTexture } from "./GalleryPhotos.js";
+import { COUNTRIES_PHOTOS, loadCountriesTexture, fitCountriesPhotos } from "./CountriesGalleryPhotos.js";
+import { SATELLITE_PHOTOS, loadSatelliteTexture, assignSatellitePhotos, fitSatellitePhotos } from "./SatelliteGalleryPhotos.js";
+import { WATER_PHOTOS, loadWaterTexture } from "./WaterGalleryPhotos.js";
 
 import { layoutDenseGallery, layoutCubeGallery } from "./GalleryLayout.js";
+import { layoutImmersiveSphere } from "./ImmersiveSphereLayout.js";
+import { layoutPhyllotaxis } from "./PhyllotaxisLayout.js";
+import { layoutConstellation } from "./ConstellationLayout.js";
+import { layoutTimelineTunnel } from "./TimelineTunnelLayout.js";
+import { layoutSpiralGallery } from "./SpiralGalleryLayout.js";
 
 const SEGMENTS = ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"];
 const BARS = {
@@ -13,9 +21,10 @@ const BARS = {
 
 /** Reusable photo gallery with numbered loading/error placeholders. Its shell has no enclosing surface. */
 export class GalleryRoom {
-  constructor(container, { layout = "SPHERICAL", content = "cities", id = "cities", name = "Cities", photoLoader = loadCityTexture } = {}) {
-    if (!["SPHERICAL", "CUBE"].includes(layout)) throw new Error("Unsupported gallery layout: " + layout);
-    if (!["cities", "placeholders"].includes(content)) throw new Error("Unsupported gallery content: " + content);
+  constructor(container, { layout = "SPHERICAL", content = "cities", id = "cities", name = "Cities", photoLoader = null } = {}) {
+    if (!["SPHERICAL", "CUBE", "IMMERSIVE_SPHERE", "SPIRAL", "TIMELINE_TUNNEL", "CONSTELLATION", "PHYLLOTAXIS"].includes(layout)) throw new Error("Unsupported gallery layout: " + layout);
+    if (!["cities", "water", "countries", ...Object.keys(SATELLITE_PHOTOS), "placeholders"].includes(content)) throw new Error("Unsupported gallery content: " + content);
+    photoLoader ??= SATELLITE_PHOTOS[content] ? loadSatelliteTexture : content === "countries" ? loadCountriesTexture : content === "water" ? loadWaterTexture : loadCityTexture;
     this.layout = layout;
     this.content = content;
     this.id = id;
@@ -86,16 +95,32 @@ export class GalleryRoom {
     }
     // Placeholder destinations share the same panel/layout machinery, but have
     // no media requests, textures or lightbox-ready photo planes.
-    const photos = content === "cities" ? assignPhotos(this.monitors) : this.monitors.map((_, i) => ({
+    let photos = content === "cities" ? assignPhotos(this.monitors)
+      : content === "water" ? assignPhotos(this.monitors, WATER_PHOTOS) : this.monitors.map((_, i) => ({
       path: id + "/placeholder-" + (i + 1), width: 2, height: 1.2,
     }));
     this.monitors.forEach((monitor, i) => {
       monitor.userData.photo = photos[i];
-      monitor.userData.photoStatus = content === "cities" ? "loading" : "placeholder";
+      monitor.userData.photoStatus = content === "placeholders" ? "placeholder" : "loading";
       if (content === "placeholders") monitor.name = name + " · Panel " + (i + 1);
     });
     if (layout === "CUBE") layoutCubeGallery(this.monitors);
+    else if (layout === "IMMERSIVE_SPHERE") layoutImmersiveSphere(this.monitors);
+    else if (layout === "SPIRAL") layoutSpiralGallery(this.monitors);
+    else if (layout === "TIMELINE_TUNNEL") layoutTimelineTunnel(this.monitors);
+    else if (layout === "CONSTELLATION") this.constellation = layoutConstellation(this.monitors, this.group);
+    else if (layout === "PHYLLOTAXIS") layoutPhyllotaxis(this.monitors);
     else layoutDenseGallery(this.monitors);
+    if (content === "countries") {
+      // Preserve the original placeholder cube, then balance photos using its actual adjacency.
+      photos = assignPhotos(this.monitors, COUNTRIES_PHOTOS);
+      this.monitors.forEach((monitor, i) => { monitor.userData.photo = photos[i]; });
+    }
+    if (SATELLITE_PHOTOS[content]) {
+      // Existing placeholder geometry is frozen before assigning real photographs.
+      photos = assignSatellitePhotos(this.monitors, SATELLITE_PHOTOS[content]);
+      this.monitors.forEach((monitor, i) => { monitor.userData.photo = photos[i]; });
+    }
     if (content === "placeholders") {
       this.ready = Promise.resolve();
       return;
@@ -122,6 +147,8 @@ export class GalleryRoom {
             monitor.add(screen);
             monitor.name = photo.city + " · " + photo.title + " · " + monitor.userData.number;
             monitor.userData.photoStatus = "ready";
+            if (content === "countries") fitCountriesPhotos([monitor]);
+            fitSatellitePhotos([monitor]);
           }
         } catch {
           if (!this.disposed) this.monitors.filter(m => m.userData.photo.path === photo.path)
@@ -146,6 +173,7 @@ export class GalleryRoom {
     if (this.disposed) return;
     this.disposed = true;
     this.abortController.abort();
+    this.constellation?.dispose();
     this.group.removeFromParent();
     this.geometry.dispose();
     this.photoGeometry?.dispose();

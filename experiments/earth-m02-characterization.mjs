@@ -10,21 +10,21 @@ let checks = 0;
 const check = (condition, message) => { assert.ok(condition, message); checks++; };
 const countries = EARTH_GALLERIES.find(config => config.id === "countries");
 check(EARTH_SATELLITES.length === 7 && EARTH_GALLERIES.length === 7, "seven satellite destinations remain registered");
-check(countries.number === 2 && countries.layout === "CUBE" && countries.content === "placeholders" && !countries.radiusControl,
-  "Countries alone selects the cube placeholder layout without Sphere Radius");
-check(EARTH_GALLERIES.filter(config => config !== countries).every(config => config.layout === "SPHERICAL" && config.radiusControl),
-  "the other six destinations retain their spherical controls and layout");
+check(countries.number === 2 && countries.layout === "CUBE" && countries.content === "countries" && !countries.radiusControl,
+  "Countries photographs retain the cube layout without Sphere Radius");
+check(EARTH_GALLERIES.filter(config => config !== countries).every(config => config.layout === (config.number === 3 ? "IMMERSIVE_SPHERE" : config.number === 4 ? "SPIRAL" : config.number === 5 ? "TIMELINE_TUNNEL" : config.number === 6 ? "CONSTELLATION" : config.number === 7 ? "PHYLLOTAXIS" : "SPHERICAL") && config.radiusControl === (config.number !== 4 && config.number !== 5 && config.number !== 6 && config.number !== 7)),
+  "Countries remains the only cube; Water uses its immersive sphere, Animals its spiral, Events its tunnel, Ethnicity its constellation, Plants its botanical dome, and Cities its spherical mosaic");
 const faces = [
   ["front", [0, 0, -1]], ["right", [1, 0, 0]], ["back", [0, 0, 1]],
   ["left", [-1, 0, 0]], ["ceiling", [0, 1, 0]], ["floor", [0, -1, 0]],
 ];
 const parent = new THREE.Group();
-const room = new GalleryRoom(parent, { ...countries, photoLoader: () => { throw new Error("Cube must not load media"); } });
-const twin = new GalleryRoom(new THREE.Group(), countries);
+const room = new GalleryRoom(parent, { ...countries, content: "placeholders", photoLoader: () => { throw new Error("Cube must not load media"); } });
+const twin = new GalleryRoom(new THREE.Group(), { ...countries, content: "placeholders" });
 await Promise.all([room.ready, twin.ready]);
 check(room.monitors.length === 75 && new Set(room.monitors.map(m => m.userData.number)).size === 75, "all 75 stable numbered slots exist");
 check(room.photoMaterials.size === 0 && !room.photoGeometry && room.monitors.every(m => m.userData.photoStatus === "placeholder"),
-  "Countries still has zero loaded photograph resources");
+  "the independent placeholder cube fixture creates no photograph resources");
 const state = m => ({ position: m.position.toArray(), scale: m.scale.toArray(), orientation: m.quaternion.toArray(),
   cell: m.userData.mosaicCell, size: m.userData.panelSize, photo: m.userData.photo.path });
 check(JSON.stringify(room.monitors.map(state)) === JSON.stringify(twin.monitors.map(state)), "cube construction is deterministic");

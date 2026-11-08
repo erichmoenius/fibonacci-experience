@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';import * as THREE from 'three';import {GalleryOpticalZoom} from '../src/interactions/GalleryOpticalZoom.js';
+let checks=0;const check=(v,m)=>{assert.ok(v,m);checks++;};
+class Canvas{constructor(){this.handlers=new Set();this.clientHeight=650;}addEventListener(n,h){this.handlers.add(h);}removeEventListener(n,h){this.handlers.delete(h);}}
+const canvas=new Canvas(),camera=new THREE.PerspectiveCamera(73.125,1,.1,100);let owned=true,blocked=false;const zoom=new GalleryOpticalZoom({camera,canvas,ownsCamera:()=>owned,blocked:()=>blocked});
+const event=(deltaY,extra={})=>({target:canvas,deltaY,deltaMode:0,preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;},...extra});const settle=()=>{for(let i=0;i<150;i++)zoom.update(1/60);};
+check(canvas.handlers.size===1,'one wheel listener per gallery interaction');const outside=event(-100);zoom.wheel(outside);check(!outside.prevented&&camera.fov===73.125,'outside galleries untouched');
+for(let cycle=0;cycle<20;cycle++){
+ zoom.enter();const start=camera.fov;const up=event(-100);zoom.wheel(up);check(up.prevented&&up.stopped&&zoom.targetFov<start&&camera.fov===start,'scroll up targets smaller FOV without instantaneous jump');zoom.update(1/60);check(camera.fov<start&&camera.fov>zoom.targetFov,'bounded smooth intermediate FOV');
+ for(let i=0;i<30;i++)zoom.wheel(event(-10000));settle();check(camera.fov===zoom.minFov,'zoom in reaches exact lower bound');for(let i=0;i<30;i++)zoom.wheel(event(10000));settle();check(camera.fov===zoom.maxFov,'zoom out reaches exact upper bound');
+ blocked=true;const lightbox=event(-100),ui=event(-100,{target:{}});zoom.wheel(lightbox);zoom.wheel(ui);check(!lightbox.prevented&&!ui.prevented,'lightbox and UI scrolling not intercepted');const held=camera.fov;zoom.update(1/60);check(camera.fov===held,'pending smoothing stops in lightbox');blocked=false;
+ const pinch=event(-100,{ctrlKey:true});zoom.wheel(pinch);check(!pinch.prevented,'browser pinch gesture not hijacked');zoom.leave();check(camera.fov===start&&canvas.handlers.size===1,'exact FOV restoration and no listener accumulation');
+}
+zoom.enter();zoom.wheel(event(-300));zoom.update(1/60);owned=false;zoom.update(1/60);check(camera.fov===73.125&&zoom.originalFov===undefined,'camera transition restores exact baseline FOV');owned=true;zoom.enter();zoom.wheel(event(-1,{deltaMode:1}));check(zoom.targetFov<73.125,'line wheel units supported');zoom.dispose();zoom.dispose();check(camera.fov===73.125&&canvas.handlers.size===0,'theme disposal restores FOV and removes listener');console.log(JSON.stringify({result:'PASS',checks,cycles:20,baselineFov:73.125,minFov:73.125*.35,maxFov:73.125*1.5}));

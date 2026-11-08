@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { EARTH_GALLERIES } from "../config/earthGalleries.js";
 import { GalleryRoom } from "../systems/GalleryRoom.js";
 import { GalleryLightbox } from "./GalleryLightbox.js";
+import { GalleryOpticalZoom } from "./GalleryOpticalZoom.js";
 import { CitiesGalleryControls } from "../ui/CitiesGalleryControls.js";
 
 /** Theme-local click observer. Leaves all flight input alone until a valid release. */
@@ -21,6 +22,9 @@ export class EarthGalleryInteraction {
     this.activeGallery = this.galleries.get(1);
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
+    this.opticalZoom = new GalleryOpticalZoom({camera:cameraDirector.camera,canvas:this.canvas,
+      ownsCamera:()=>this.opened&&!this.disposed&&this.director.mode==="inspect"&&!this.director.isInJourney(),
+      blocked:()=>Boolean(this.lightbox)});
     this.listeners = [];
     const listen = (name, handler) => {
       eventWindow.addEventListener(name, handler, true);
@@ -182,6 +186,7 @@ export class EarthGalleryInteraction {
     this.director.freeFlight.reset();
     this.showControls();
     this.layoutControls.enter(this.room);
+    this.opticalZoom.enter();
     return true;
   }
 
@@ -234,7 +239,7 @@ export class EarthGalleryInteraction {
     };
     const hint = this.document.createElement("span");
     hint.textContent = this.activeGallery.config.name.toUpperCase() + " · Drag to look"
-      + (this.activeGallery.config.content === "cities" ? " · Click a photo to enlarge" : " · Numbered placeholders");
+      + (this.activeGallery.config.content !== "placeholders" ? " · Click a photo to enlarge" : " · Numbered placeholders");
     root.appendChild(hint);
     this.back = button("Back to Earth", () => this.close());
     this.controls = root;
@@ -270,6 +275,7 @@ export class EarthGalleryInteraction {
 
   close() {
     if (!this.opened) return;
+    this.opticalZoom.leave();
     this.closeLightbox();
     this.layoutControls.leave();
     this.opened = false;
@@ -286,13 +292,16 @@ export class EarthGalleryInteraction {
   update() {
     // A pending Earth map completion cannot reveal Earth through the room.
     if (this.opened) this.theme.earth.group.visible = this.theme.satellites.group.visible = false;
+    this.opticalZoom.update();
     this.lightbox?.update();
-    this.layoutControls.setVisible(this.opened && !this.lightbox);
+    this.galleries.forEach(gallery => gallery.controls.setVisible(
+      this.opened && !this.lightbox && gallery === this.activeGallery));
   }
 
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.opticalZoom.dispose();
     this.galleries.forEach(gallery => gallery.controls.dispose());
     this.closeLightbox({ restoreFocus: false });
     this.endLook();

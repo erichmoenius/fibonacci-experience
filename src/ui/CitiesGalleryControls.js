@@ -1,135 +1,129 @@
-import { DEFAULT_GALLERY_RADIUS, MIN_GALLERY_RADIUS, MAX_GALLERY_RADIUS, measureMosaic, setMosaicGap, setMosaicRadius } from "../systems/GalleryLayout.js";
+import { CITIES_HOME } from "../config/earthGalleries.js";
+import { GalleryLayoutTuning, GALLERY_TUNING_LIMITS } from "../systems/GalleryLayoutTuning.js";
 
-/** Existing Cities tuning lab, configurable for other gallery destinations. Lens magnification and angular tile spacing are
- * independent; this class never writes camera position or orientation. */
+export const GALLERY_PRESET_VERSION = 2;
+export const galleryPresetKey = id => "fibonacci-experience:gallery:" + id;
+const number = (value, min, max, fallback) => typeof value === "number" && Number.isFinite(value)
+  ? Math.max(min, Math.min(max, value)) : fallback;
+
+/** Three physical layout controls. Camera position, FOV and zoom are untouched. */
 export class CitiesGalleryControls {
-  constructor(gui, camera, { name = "Cities", radiusControl = true, layout = "SPHERICAL" } = {}) {
-    this.name = name;
-    this.layout = layout;
-    this.radiusControl = radiusControl;
-    this.gui = gui;
-    this.camera = camera;
-    this.settings = { thumbnailSize: 100, gap: 0, effectiveGap: 0,
-      ...(radiusControl ? { sphereRadius: DEFAULT_GALLERY_RADIUS } : {}),
-      reset: () => this.reset() };
+  constructor(gui, camera, { id = "cities", name = "Cities", layout = "SPHERICAL", home = id === "cities" ? CITIES_HOME : { pictureSize: 100, gap: 0, radius: 0 } } = {}, storage) {
+    Object.assign(this, { gui, camera, id, name, layout, storage });
+    this.limits = GALLERY_TUNING_LIMITS[layout];
+    this.home = Object.freeze({ ...home });
+    this.settings = { ...this.home,
+      save: () => this.save(), load: () => this.load(), reset: () => this.reset() };
     this.controllers = [];
-    // Register before the root Settings Load, even before the room exists.
-    if (this.gui) this.createGUI();
+    if (gui) this.createGUI();
     this.setVisible(false);
+  }
+
+  createGUI() {
+    const folder = this.folder = this.gui.addFolder("Gallery / " + this.name);
+    // Root GUI presets do not read/write satellite layouts. Each satellite owns its preset.
+    folder.save = () => ({ controllers: {}, folders: {} });
+    folder.load = () => folder;
+    this.controllers.push(folder.add(this.settings,"pictureSize",1,150,1).name("Picture Size (%)").onChange(()=>this.apply()));
+    this.controllers.push(folder.add(this.settings,"gap",-50,50,1).name("Gap (%)").onChange(()=>this.apply()));
+    this.controllers.push(folder.add(this.settings,"radius",-5,5,.1).name("Radius / Traveller Distance").onChange(()=>this.apply()));
+    this.controllers[0].domElement.title = "Physical panel dimensions relative to factory size. Requested range 1â€“150%. Safe effective size is reported below when clearance limits it.";
+    this.controllers[1].domElement.title = "Signed slot margin: negative closes edge spacing, positive opens it. Zero is factory spacing. Safety can limit effective panel size.";
+    this.controllers[2].domElement.title = this.limits.description + ". Offset from factory distance: negative closer, positive farther. Safe effective offset is reported below. Traveller stays fixed.";
+    folder.add(this.settings,"save").name("Save Gallery");
+    folder.add(this.settings,"load").name("Load Gallery");
+    folder.add(this.settings,"reset").name("Reset Gallery Layout");
+    folder.open();
   }
 
   enter(room) {
     if (this.disposed) return;
     this.room = room;
-    this.baseZoom = this.camera.zoom;
-    if (this.defaultGap === undefined) {
-      this.defaultGap = measureMosaic(room.monitors).photoFreeFraction * 100;
-      if (!this.gapConfigured) this.settings.gap = this.defaultGap;
-    }
-    if (this.gui && !this.folder) this.createGUI();
-    this.applySize();
-    this.applyGap();
-    this.applyRadius();
-    this.setVisible(true);
+    this.tuning ??= new GalleryLayoutTuning(room,this.layout);
+    if (!this.entered) { this.entered = true; this.load(); }
+    this.apply(); this.setVisible(true);
+    room.ready.then(()=>{if(!this.disposed&&this.room===room)this.apply();});
   }
 
-  createGUI() {
-    const folder = this.folder = this.gui.addFolder("Gallery / " + this.name);
-    // Keep lil-gui's native controller-name schema in the existing theme save.
-    const save = folder.save.bind(folder), load = folder.load.bind(folder);
-    folder.save = (...args) => {
-      const data = save(...args);
-      delete data.controllers["Effective Gap (%)"];
-      // Before first entry an untouched gap has not yet been measured.
-      if (!this.gapConfigured) delete data.controllers["Gap (%)"];
-      return data;
-    };
-    folder.load = (data) => {
-      // lil-gui skips onChange when a saved zero equals the initial value.
-      if (Object.hasOwn(data.controllers ?? {}, "Gap (%)")) this.gapConfigured = true;
-      return load({ ...data, controllers: {
-        ...(this.radiusControl ? { "Sphere Radius (units)": DEFAULT_GALLERY_RADIUS } : {}), ...data.controllers,
-      } });
-    };
-    this.controllers.push(folder.add(this.settings, "thumbnailSize", 25, 150, 1)
-      .name("Thumbnail Size (%)").onChange(() => this.applySize()));
-    this.controllers.push(folder.add(this.settings, "gap", 0, 30, 0.1)
-      .name("Gap (%)").onChange(() => this.applyGap()));
-    if (this.radiusControl) {
-      const radius = folder.add(this.settings, "sphereRadius", MIN_GALLERY_RADIUS, MAX_GALLERY_RADIUS, 0.1)
-        .name("Sphere Radius (units)").onChange(() => this.applyRadius());
-      radius.domElement.title = "Center-to-photo distance in world units; photo dimensions stay fixed. Larger Radius makes photos appear smaller. Minimum 10 prevents dense-mosaic overlaps.";
-      this.controllers.push(radius);
-    }
-    this.controllers.push(folder.add(this.settings, "effectiveGap").name("Effective Gap (%)").disable());
-    folder.add(this.settings, "reset").name("Reset Gallery Layout");
-    this.controllers[0].domElement.title = "Gallery-only lens magnification. Does not resize or overlap photo meshes.";
-    this.controllers[1].domElement.title = this.radiusControl
-      ? "Dark-area target at radius 10. Larger Radius increases actual gaps; Effective Gap reports them. Zero retains frame clearance."
-      : this.layout === "CUBE"
-        ? "Cube interior dark-area target. Zero retains a small safety seam around frames."
-        : "Whole-sphere dark-area target. Zero retains a small safety seam around frames.";
-    folder.open();
-  }
-
-  applySize() {
-    this.settings.thumbnailSize = Math.max(25, Math.min(150, Number(this.settings.thumbnailSize) || 100));
-    if (!this.room || this.baseZoom === undefined) return;
-    const zoom = this.baseZoom * this.settings.thumbnailSize / 100;
-    if (this.camera.zoom !== zoom) { this.camera.zoom = zoom; this.camera.updateProjectionMatrix(); }
-    this.refresh();
-  }
-
-  applyGap() {
-    this.gapConfigured = true;
-    this.settings.gap = Math.max(0, Math.min(30, Number(this.settings.gap) || 0));
-    if (!this.room) return;
-    this.settings.effectiveGap = setMosaicGap(this.room.monitors, this.settings.gap).photoFreeFraction * 100;
-    this.room.group.updateWorldMatrix(true, true);
-    this.refresh();
-  }
-
-  applyRadius() {
-    if (!this.radiusControl) return;
-    const value = this.settings.sphereRadius;
-    this.settings.sphereRadius = Number.isFinite(value)
-      ? Math.max(MIN_GALLERY_RADIUS, Math.min(MAX_GALLERY_RADIUS, value)) : DEFAULT_GALLERY_RADIUS;
+  apply() {
+    this.settings.pictureSize = number(this.settings.pictureSize,1,150,this.home.pictureSize);
+    this.settings.gap = number(this.settings.gap,-50,50,this.home.gap);
+    this.settings.radius = number(this.settings.radius,-5,5,this.home.radius);
     if (this.room) {
-      setMosaicRadius(this.room.monitors, this.settings.sphereRadius);
-      this.settings.effectiveGap = measureMosaic(this.room.monitors).photoFreeFraction * 100;
-      this.room.group.updateWorldMatrix(true, true);
+      this.effective = this.tuning.apply(this.settings);
+      this.maxPictureSize = this.effective.maxPictureSize;
+      const limits = [];
+      if (this.effective.pictureSize !== this.settings.pictureSize) limits.push(`Picture Size ${this.settings.pictureSize}% requested â†’ ${this.effective.pictureSize}% effective for clearance`);
+      if (this.effective.radius !== this.settings.radius) limits.push(`Radius ${this.settings.radius} requested â†’ ${this.effective.radius} effective for Traveller clearance`);
+      this.clampNotice = limits.join("; ");
+      this.layoutNotice = this.effective.adaptive ? (this.layout === "SPIRAL" ? "Animals adaptive spiral density active; preset values unchanged" : this.layout === "TIMELINE_TUNNEL" ? "Events adaptive timeline density active; preset values unchanged" : this.layout === "CONSTELLATION" ? "Ethnicity adaptive constellation density active; preset values unchanged" : "Plants adaptive botanical density active; preset values unchanged") : "";
+      this.notice("Layout updated");
     }
-    this.refresh();
+    this.controllers.forEach(c=>c.updateDisplay());
   }
 
-  refresh() { this.controllers.forEach(controller => controller.updateDisplay()); }
+  // Existing lifecycle callers/tests can request a single-control refresh.
+  applySize() { this.apply(); }
+  applyGap() { this.apply(); }
+  applyRadius() { this.apply(); }
+
+  getStorage() { return this.storage ?? globalThis.localStorage; }
+
+  save() {
+    if (!this.room || this.disposed) return false;
+    this.apply();
+    try {
+      const {pictureSize,gap,radius} = this.settings;
+      this.getStorage().setItem(galleryPresetKey(this.id), JSON.stringify({version:GALLERY_PRESET_VERSION,gallery:this.id,settings:{pictureSize,gap,radius}}));
+      this.presetNotice="";this.notice("Gallery saved");return true;
+    } catch { this.notice("Gallery could not be saved");return false; }
+  }
+
+  load() {
+    if (!this.room || this.disposed) return false;
+    try {
+      const raw = this.getStorage()?.getItem(galleryPresetKey(this.id));
+      if (!raw) { this.notice("No saved gallery preset");return false; }
+      const data = JSON.parse(raw);
+      if (!data || Array.isArray(data) || typeof data !== "object" || (data.gallery !== undefined && data.gallery !== this.id)) return false;
+      if (![undefined,0,1,GALLERY_PRESET_VERSION].includes(data.version)) {
+        this.presetNotice="Unsupported preset version; saved data retained";this.notice("Preset not loaded");return false;
+      }
+      let values = data.settings ?? data;
+      if (!values || Array.isArray(values) || typeof values !== "object" || !["pictureSize","gap","radius"].some(k=>typeof values[k]==="number"&&Number.isFinite(values[k]))) return false;
+      this.presetNotice="";
+      if (data.version !== GALLERY_PRESET_VERSION) {
+        // M10A stored absolute radii. Conversion never overwrites the old record.
+        const absolute = values.radius ?? this.limits.defaultRadius;
+        const offset = absolute - this.limits.defaultRadius;
+        if (typeof absolute !== "number" || !Number.isFinite(absolute) || offset < -5 || offset > 5
+          || (values.pictureSize !== undefined && (!Number.isFinite(values.pictureSize) || values.pictureSize < 1 || values.pictureSize > 150))
+          || (values.gap !== undefined && (!Number.isFinite(values.gap) || values.gap < -50 || values.gap > 50))) {
+          this.presetNotice="M10A preset exceeds the new ranges; original data retained. Reset or adjust and Save to create a v2 preset.";
+          this.notice("Preset not loaded");return false;
+        }
+        values={...values,radius:offset};
+        this.presetNotice="M10A absolute Radius converted to offset; original saved data retained until Save";
+      }
+      this.settings.pictureSize=number(values.pictureSize,1,150,this.home.pictureSize);
+      this.settings.gap=number(values.gap,-50,50,this.home.gap);
+      this.settings.radius=number(values.radius,-5,5,this.home.radius);
+      this.apply();this.notice("Gallery loaded");return true;
+    } catch { this.notice("Saved gallery preset unavailable");return false; }
+  }
 
   reset() {
-    if (this.defaultGap === undefined) return;
-    this.settings.thumbnailSize = 100;
-    this.settings.gap = this.defaultGap;
-    if (this.radiusControl) this.settings.sphereRadius = DEFAULT_GALLERY_RADIUS;
-    this.applySize(); this.applyGap(); this.applyRadius();
+    Object.assign(this.settings,this.home);
+    this.apply();this.notice("Factory layout restored; saved preset retained");
   }
 
-  setVisible(visible) {
-    if (this.folder && this.visible !== visible) this.folder.show(visible);
-    this.visible = visible;
+  notice(message) {
+    this.statusMessage=[message,this.presetNotice,this.clampNotice,this.layoutNotice].filter(Boolean).join(" Â· ");
+    if (!this.folder?.domElement || typeof document === "undefined") return;
+    if (!this.status) { this.status=document.createElement("div");this.status.setAttribute("role","status");this.status.style.cssText="padding:4px 8px;font:11px system-ui";this.folder.domElement.appendChild(this.status); }
+    this.status.textContent=this.statusMessage;
   }
-
-  leave() {
-    if (this.baseZoom !== undefined) {
-      if (this.camera.zoom !== this.baseZoom) {
-        this.camera.zoom = this.baseZoom; this.camera.updateProjectionMatrix();
-      }
-      this.baseZoom = undefined;
-    }
-    this.room = null;
-    this.setVisible(false);
-  }
-
-  dispose() {
-    if (this.disposed) return;
-    this.leave(); this.folder?.destroy(); this.disposed = true;
-  }
+  setVisible(visible) { this.visible=Boolean(visible);this.folder?.show(this.visible); }
+  leave() { this.room=null;this.setVisible(false); }
+  dispose() { if(this.disposed)return;this.leave();this.folder?.destroy();this.disposed=true; }
 }
